@@ -49,8 +49,6 @@ export default function RunLive() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [currentTestIndex, setCurrentTestIndex] = useState(0);
   const logsRef = useRef<HTMLDivElement>(null);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const logIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const stopRun = useStopRun();
 
   const { data: run, refetch: refetchRun } = useGetRun(runId, {
@@ -75,19 +73,38 @@ export default function RunLive() {
   const isComplete = run?.status === "completed" || run?.status === "failed";
   const isRunning = run?.status === "running";
 
-  // Simulate streaming logs
+  // EventSource stream for real-time logs
   useEffect(() => {
-    if (!isRunning) return;
-    let logIndex = 0;
-    logIntervalRef.current = setInterval(() => {
-      const now = new Date().toLocaleTimeString("en-US", { hour12: false });
-      const text = generateLog("test", logIndex);
-      const level: LogEntry["level"] = logIndex % 7 === 0 ? "pass" : logIndex % 11 === 0 ? "fail" : "info";
-      setLogs(prev => [...prev.slice(-150), { time: now, text, level }]);
-      logIndex++;
-    }, 800);
-    return () => { if (logIntervalRef.current) clearInterval(logIntervalRef.current); };
-  }, [isRunning]);
+    if (!runId) return;
+
+    const token = localStorage.getItem("autoviva_token");
+    const sseUrl = `/api/runs/${runId}/stream?token=${encodeURIComponent(token || "")}`;
+    const eventSource = new EventSource(sseUrl);
+
+    eventSource.onmessage = (event) => {
+      try {
+        const log = JSON.parse(event.data);
+        setLogs(prev => {
+          if (prev.length > 0) {
+            const last = prev[prev.length - 1];
+            if (last.text === log.text && last.time === log.time) return prev;
+          }
+          return [...prev.slice(-250), log];
+        });
+      } catch (err) {
+        console.error("Failed to parse log from SSE:", err);
+      }
+    };
+
+    eventSource.onerror = (err) => {
+      console.error("EventSource connection error:", err);
+      eventSource.close();
+    };
+
+    return () => {
+      eventSource.close();
+    };
+  }, [runId]);
 
   // Update current test index based on results
   useEffect(() => {
@@ -105,16 +122,19 @@ export default function RunLive() {
 
   // Add completion log
   useEffect(() => {
-    if (isComplete) {
-      if (logIntervalRef.current) clearInterval(logIntervalRef.current);
+    if (isComplete && run) {
       const now = new Date().toLocaleTimeString("en-US", { hour12: false });
-      setLogs(prev => [...prev, {
-        time: now,
-        text: `Evaluation complete. Score: ${run?.score}/100 (${run?.grade}). ${run?.passed} passed, ${run?.failed} failed.`,
-        level: "pass"
-      }]);
+      setLogs(prev => {
+        const hasCompletionLog = prev.some(l => l.text.startsWith("Evaluation complete. Score:"));
+        if (hasCompletionLog) return prev;
+        return [...prev, {
+          time: now,
+          text: `Evaluation complete. Score: ${run.score}/100 (${run.grade}). ${run.passed} passed, ${run.failed} failed.`,
+          level: "pass"
+        }];
+      });
     }
-  }, [isComplete]);
+  }, [isComplete, run]);
 
   const handleStop = () => {
     stopRun.mutate({ runId }, {
@@ -123,6 +143,13 @@ export default function RunLive() {
   };
 
   const progressPct = totalTests > 0 ? Math.round(((passed + failed) / totalTests) * 100) : 0;
+
+  const latestScreenshot = results && results.length > 0
+    ? [...results]
+        .reverse()
+        .flatMap(r => r.screenshots || [])
+        .find(s => s.url)
+    : null;
 
   return (
     <SidebarLayout>
@@ -204,19 +231,27 @@ export default function RunLive() {
           {/* Center: Screenshot + Logs */}
           <div className="flex-1 flex flex-col min-w-0 gap-3">
             {/* Screenshot Area */}
-            <div className="h-40 bg-card border border-border rounded-lg flex items-center justify-center relative overflow-hidden">
-              <div className="absolute top-2 left-2 flex items-center gap-1.5">
+            <div className="h-48 bg-card border border-border rounded-lg flex items-center justify-center relative overflow-hidden">
+              <div className="absolute top-2 left-2 flex items-center gap-1.5 z-10">
                 {isRunning && (
-                  <span className="flex items-center gap-1 bg-red-500/20 text-red-400 text-xs px-2 py-0.5 rounded-full border border-red-500/30">
+                  <span className="flex items-center gap-1 bg-red-500/20 text-red-400 text-xs px-2 py-0.5 rounded-full border border-red-500/30 font-medium">
                     <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
                     LIVE
                   </span>
                 )}
               </div>
-              <div className="flex flex-col items-center text-muted-foreground">
-                <Camera className="w-8 h-8 mb-2 opacity-40" />
-                <span className="text-xs">{isRunning ? "Capturing screenshots..." : "No live screenshot"}</span>
-              </div>
+              {latestScreenshot ? (
+                <img
+                  src={latestScreenshot.url}
+                  alt={latestScreenshot.label || "Live browser capture"}
+                  className="w-full h-full object-cover object-top"
+                />
+              ) : (
+                <div className="flex flex-col items-center text-muted-foreground">
+                  <Camera className="w-8 h-8 mb-2 opacity-40" />
+                  <span className="text-xs font-medium">{isRunning ? "Capturing screenshots..." : "No live screenshot"}</span>
+                </div>
+              )}
             </div>
 
             {/* Log Stream */}

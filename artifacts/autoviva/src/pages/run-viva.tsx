@@ -4,7 +4,7 @@ import { useGetRun, getGetRunQueryKey, useGetReport, getGetReportQueryKey, useAs
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Send, FileText, Bot, User, Loader2, ChevronRight } from "lucide-react";
+import { Send, FileText, Bot, User, Loader2, ChevronRight, Mic, MicOff, Volume2, VolumeX } from "lucide-react";
 
 type Message = {
   id: string;
@@ -43,6 +43,11 @@ export default function RunViva() {
   const [input, setInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  const [isRecording, setIsRecording] = useState(false);
+  const [enableTts, setEnableTts] = useState(true);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+
   const { data: run } = useGetRun(runId, {
     query: { enabled: !!runId, queryKey: getGetRunQueryKey(runId) }
   });
@@ -54,6 +59,121 @@ export default function RunViva() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  const playBase64Audio = (base64Audio: string) => {
+    try {
+      const audioUrl = `data:audio/mp3;base64,${base64Audio}`;
+      const audio = new Audio(audioUrl);
+      audio.play().catch(err => console.error("Audio playback error:", err));
+    } catch (err) {
+      console.error("Audio play creation failed:", err);
+    }
+  };
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          audioChunksRef.current.push(e.data);
+        }
+      };
+
+      mediaRecorder.onstop = () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+        const reader = new FileReader();
+        reader.readAsDataURL(audioBlob);
+        reader.onloadend = () => {
+          const base64Audio = (reader.result as string).split(",")[1];
+          sendVoiceMessage(base64Audio);
+        };
+        stream.getTracks().forEach(track => track.stop());
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+    } catch (err) {
+      console.error("Mic start failed:", err);
+      alert("Microphone access is required for Voice Q&A.");
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+    }
+  };
+
+  const toggleRecording = () => {
+    if (isRecording) {
+      stopRecording();
+    } else {
+      startRecording();
+    }
+  };
+
+  const sendVoiceMessage = (base64Audio: string) => {
+    if (askViva.isPending) return;
+
+    const tempUserMsg: Message = {
+      id: `msg-${Date.now()}-temp`,
+      role: "user",
+      content: "🎤 [Recording voice answer...]",
+      timestamp: new Date(),
+    };
+    setMessages(prev => [...prev, tempUserMsg]);
+
+    askViva.mutate(
+      {
+        runId,
+        data: {
+          question: "Voice Question",
+          audio: base64Audio,
+          enableTts,
+        } as any,
+      },
+      {
+        onSuccess: (data: any) => {
+          setMessages(prev => {
+            const list = prev.filter(m => m.id !== tempUserMsg.id);
+            const userMsg: Message = {
+              id: `msg-${Date.now()}`,
+              role: "user",
+              content: data.question || "🎤 [Voice input]",
+              timestamp: new Date(),
+            };
+            const assistantMsg: Message = {
+              id: `msg-${Date.now()}-ai`,
+              role: "assistant",
+              content: data.answer || "No response received.",
+              timestamp: new Date(),
+            };
+            return [...list, userMsg, assistantMsg];
+          });
+
+          if (data.audioResponse) {
+            playBase64Audio(data.audioResponse);
+          }
+        },
+        onError: () => {
+          setMessages(prev => {
+            const list = prev.filter(m => m.id !== tempUserMsg.id);
+            return [...list, {
+              id: `msg-${Date.now()}-err`,
+              role: "assistant",
+              content: "I failed to transcribe or process your voice message. Please try text input instead.",
+              timestamp: new Date(),
+            }];
+          });
+        }
+      }
+    );
+  };
 
   const sendMessage = (text: string) => {
     if (!text.trim() || askViva.isPending) return;
@@ -67,9 +187,15 @@ export default function RunViva() {
     setInput("");
 
     askViva.mutate(
-      { runId, data: { question: text } },
       {
-        onSuccess: (data) => {
+        runId,
+        data: {
+          question: text,
+          enableTts,
+        } as any,
+      },
+      {
+        onSuccess: (data: any) => {
           const assistantMsg: Message = {
             id: `msg-${Date.now()}-ai`,
             role: "assistant",
@@ -77,6 +203,10 @@ export default function RunViva() {
             timestamp: new Date(),
           };
           setMessages(prev => [...prev, assistantMsg]);
+
+          if (data.audioResponse) {
+            playBase64Audio(data.audioResponse);
+          }
         },
         onError: () => {
           setMessages(prev => [...prev, {
@@ -181,18 +311,38 @@ export default function RunViva() {
 
           {/* Input */}
           <div className="flex gap-2">
+            <Button
+              variant={isRecording ? "destructive" : "outline"}
+              onClick={toggleRecording}
+              className={`shrink-0 ${isRecording ? "animate-pulse" : ""}`}
+              disabled={askViva.isPending}
+              title={isRecording ? "Stop Recording" : "Record Answer"}
+            >
+              {isRecording ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+            </Button>
+
             <Input
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Ask about test results, bugs, how to improve..."
+              placeholder={isRecording ? "Recording voice... Click Mic to finish & send." : "Ask about test results, bugs, how to improve..."}
               className="flex-1"
-              disabled={askViva.isPending}
+              disabled={askViva.isPending || isRecording}
             />
+
+            <Button
+              variant="outline"
+              onClick={() => setEnableTts(!enableTts)}
+              className="shrink-0"
+              title={enableTts ? "Mute AI Voice Response" : "Unmute AI Voice Response"}
+            >
+              {enableTts ? <Volume2 className="w-4 h-4 text-cyan-400" /> : <VolumeX className="w-4 h-4 text-muted-foreground" />}
+            </Button>
+
             <Button
               onClick={() => sendMessage(input)}
-              disabled={!input.trim() || askViva.isPending}
-              className="gap-1"
+              disabled={!input.trim() || askViva.isPending || isRecording}
+              className="gap-1 bg-gradient-to-r from-primary to-cyan-600 hover:opacity-90"
             >
               <Send className="w-4 h-4" />
               Send

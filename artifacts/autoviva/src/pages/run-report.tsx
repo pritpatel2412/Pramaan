@@ -47,6 +47,9 @@ export default function RunReport() {
   const params = useParams();
   const runId = params.runId || "";
   const [expandedResult, setExpandedResult] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState(false);
+
+  const isPrintMode = new URLSearchParams(window.location.search).get("print") === "true";
 
   const { data: run } = useGetRun(runId, {
     query: { enabled: !!runId, queryKey: getGetRunQueryKey(runId) }
@@ -54,6 +57,32 @@ export default function RunReport() {
   const { data: report, isLoading } = useGetReport(runId, {
     query: { enabled: !!runId, queryKey: getGetReportQueryKey(runId) }
   });
+
+  const handleDownloadPdf = async () => {
+    try {
+      setDownloading(true);
+      const token = localStorage.getItem("autoviva_token");
+      const res = await fetch(`/api/runs/${runId}/report/pdf`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      if (!res.ok) throw new Error("Failed to download PDF");
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `report-${runId}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } catch (err) {
+      console.error(err);
+      alert("Failed to download PDF report. Please try again.");
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -93,6 +122,224 @@ export default function RunReport() {
   const findings = (report.keyFindings as string[]) ?? [];
   const suggestions = (report.suggestions as string[]) ?? [];
 
+  if (isPrintMode) {
+    return (
+      <div className="min-h-screen w-full bg-slate-950 text-slate-100 p-8 space-y-6 max-w-5xl mx-auto font-sans">
+        <div className="border-b border-slate-800 pb-4 mb-6 flex justify-between items-end">
+          <div>
+            <span className="text-xs font-mono uppercase tracking-widest text-primary font-bold">AutoViva AI // Project Evaluation Report</span>
+            <h1 className="text-3xl font-black tracking-tight mt-1">{run?.projectName ?? "Project"}</h1>
+            <p className="text-xs text-slate-400 mt-1">Generated on {report.generatedAt ? new Date(report.generatedAt).toLocaleString() : new Date().toLocaleString()}</p>
+          </div>
+          <div className="text-right">
+            <div className={`text-4xl font-extrabold ${scoreColor(score)}`}>{score}<span className="text-xl text-slate-500">/100</span></div>
+            <div className={`text-lg font-bold ${gradeColor(grade)}`}>Grade: {grade}</div>
+          </div>
+        </div>
+
+        <div className="space-y-6">
+          {/* Score Display */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Card className="md:col-span-1 border-slate-800 bg-slate-900/50">
+              <CardContent className="flex flex-col items-center justify-center py-10">
+                <div className="relative w-36 h-36 mb-4">
+                  <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
+                    <circle cx="50" cy="50" r="40" fill="none" stroke="#1e293b" strokeWidth="10" />
+                    <circle
+                      cx="50" cy="50" r="40" fill="none"
+                      stroke={scoreBg(score)} strokeWidth="10"
+                      strokeDasharray={`${2 * Math.PI * 40 * score / 100} ${2 * Math.PI * 40 * (1 - score / 100)}`}
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center">
+                    <span className={`text-3xl font-black ${scoreColor(score)}`}>{score}</span>
+                    <span className="text-xs text-slate-400">/100</span>
+                  </div>
+                </div>
+                <div className={`text-3xl font-bold ${gradeColor(grade)}`}>{grade}</div>
+                <div className="text-sm text-slate-400 mt-1">
+                  {grade === "A+" ? "Exceptional" : grade === "A" ? "Excellent" : grade === "B" ? "Good" : grade === "C" ? "Average" : "Needs Work"}
+                </div>
+                <div className="mt-4 grid grid-cols-2 gap-4 w-full text-center text-sm">
+                  <div>
+                    <div className="text-green-400 font-bold text-lg">{run?.passed ?? 0}</div>
+                    <div className="text-slate-400 text-xs">Passed</div>
+                  </div>
+                  <div>
+                    <div className="text-red-400 font-bold text-lg">{run?.failed ?? 0}</div>
+                    <div className="text-slate-400 text-xs">Failed</div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="md:col-span-2 border-slate-800 bg-slate-900/50">
+              <CardHeader>
+                <CardTitle className="text-sm text-slate-300">Score Breakdown</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {breakdownData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={200}>
+                    <BarChart data={breakdownData} layout="vertical" margin={{ left: 80, right: 20 }}>
+                      <XAxis type="number" domain={[0, 30]} tick={{ fill: "#64748b", fontSize: 11 }} />
+                      <YAxis type="category" dataKey="name" tick={{ fill: "#94a3b8", fontSize: 11 }} width={80} />
+                      <Tooltip
+                        contentStyle={{ background: "#0f172a", border: "1px solid #1e293b", borderRadius: 6 }}
+                        labelStyle={{ color: "#e2e8f0" }}
+                      />
+                      <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+                        {breakdownData.map((entry, i) => (
+                          <Cell key={i} fill={scoreBg(entry.value * 3.3)} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="text-sm text-slate-400 py-8 text-center">No breakdown available</div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Executive Summary */}
+          <Card className="border-slate-800 bg-slate-900/50">
+            <CardHeader><CardTitle className="text-slate-200">Executive Summary</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm leading-relaxed text-slate-300">{report.summary}</p>
+              {findings.length > 0 && (
+                <ul className="space-y-2">
+                  {findings.map((f, i) => (
+                    <li key={i} className="flex items-start gap-2 text-sm text-slate-300">
+                      <ChevronRight className="w-4 h-4 text-primary mt-0.5 shrink-0" />
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Test Results */}
+          <Card className="border-slate-800 bg-slate-900/50">
+            <CardHeader><CardTitle className="text-slate-200">Test Results ({results.length} cases)</CardTitle></CardHeader>
+            <CardContent className="space-y-3">
+              {results.length === 0 ? (
+                <p className="text-sm text-slate-400 py-4 text-center">No test results available</p>
+              ) : results.map((r: any) => (
+                <div key={r.id} className="border border-slate-800 rounded-lg overflow-hidden bg-slate-950/40">
+                  <div className="w-full flex items-center gap-3 px-4 py-3 text-left">
+                    {statusIcon(r.status)}
+                    <span className="flex-1 text-sm font-medium text-slate-200">{r.title}</span>
+                    <span className="text-xs text-slate-400">{r.durationSeconds?.toFixed(1)}s</span>
+                    <Badge variant={r.status === "passed" ? "default" : "destructive"} className="text-xs">
+                      {r.status}
+                    </Badge>
+                  </div>
+                  <div className="px-4 pb-4 border-t border-slate-900 bg-slate-900/10 space-y-3 pt-3">
+                    {r.errorMessage && (
+                      <div className="bg-red-500/10 border border-red-500/20 rounded p-3">
+                        <p className="text-xs font-medium text-red-400 mb-1">Error</p>
+                        <p className="text-xs text-red-300 font-mono">{r.errorMessage}</p>
+                      </div>
+                    )}
+                    <div className="grid grid-cols-2 gap-2 text-xs text-slate-400">
+                      <div>Steps executed: <span className="text-slate-200">{r.stepsExecuted ?? "N/A"}</span></div>
+                      <div>Duration: <span className="text-slate-200">{r.durationSeconds?.toFixed(2)}s</span></div>
+                    </div>
+                    {r.screenshots?.length > 0 && (
+                      <div>
+                        <p className="text-xs font-medium text-slate-300 mb-2">Evidence Screenshots</p>
+                        <div className="flex gap-2 flex-wrap">
+                          {r.screenshots.map((s: any) => (
+                            <div key={s.id} className="relative">
+                              <img
+                                src={s.url || "/placeholder-screenshot.png"}
+                                alt={s.label || "Screenshot"}
+                                className="w-32 h-20 object-cover rounded border border-slate-800"
+                                onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                              />
+                              {s.label && <p className="text-[10px] text-slate-400 mt-1 text-center">{s.label}</p>}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+
+          {/* AI Examiner Notes & Recommendations */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Card className="border-slate-800 bg-slate-900/50">
+              <CardHeader><CardTitle className="text-slate-200">AI Examiner Notes</CardTitle></CardHeader>
+              <CardContent>
+                <p className="text-sm text-slate-300 leading-relaxed">{report.aiNotes}</p>
+              </CardContent>
+            </Card>
+
+            <Card className="border-slate-800 bg-slate-900/50">
+              <CardHeader><CardTitle className="text-slate-200">Recommendations</CardTitle></CardHeader>
+              <CardContent>
+                <ol className="space-y-2">
+                  {suggestions.map((s, i) => (
+                    <li key={i} className="flex items-start gap-3 text-sm text-slate-300">
+                      <span className="w-5 h-5 rounded-full bg-primary/20 text-primary text-xs flex items-center justify-center shrink-0 font-bold mt-0.5">{i + 1}</span>
+                      {s}
+                    </li>
+                  ))}
+                </ol>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Bugs Found */}
+          {bugs.length > 0 && (
+            <Card className="border-slate-800 bg-slate-900/50">
+              <CardHeader><CardTitle className="text-slate-200">Bugs Found ({bugs.length})</CardTitle></CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {bugs.map((bug: any, i: number) => (
+                    <div key={i} className="flex items-start gap-3 p-3 border border-slate-800 rounded-lg bg-slate-950/20">
+                      <Badge className={`text-xs border ${severityColor(bug.severity)} shrink-0`}>{bug.severity}</Badge>
+                      <div>
+                        <p className="text-sm font-medium text-slate-200">{bug.issue}</p>
+                        <p className="text-xs text-slate-400 mt-0.5">{bug.description}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Feature Coverage */}
+          {coverage.length > 0 && (
+            <Card className="border-slate-800 bg-slate-900/50">
+              <CardHeader><CardTitle className="text-slate-200">Feature Coverage</CardTitle></CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {coverage.map((f: any, i: number) => (
+                    <div key={i} className={`p-3 rounded-lg border text-sm flex items-center gap-2 ${
+                      f.status === "passed" ? "bg-green-500/10 border-green-500/20 text-green-400" :
+                      f.status === "failed" ? "bg-red-500/10 border-red-500/20 text-red-400" :
+                      "bg-slate-900/50 border-slate-800 text-slate-400"
+                    }`}>
+                      {f.status === "passed" ? <CheckCircle2 className="w-3 h-3 shrink-0" /> : f.status === "failed" ? <XCircle className="w-3 h-3 shrink-0" /> : <AlertTriangle className="w-3 h-3 shrink-0" />}
+                      {f.feature}
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <SidebarLayout>
       {/* Sticky Header */}
@@ -112,9 +359,13 @@ export default function RunReport() {
               Ask Viva Agent
             </Button>
           </Link>
-          <Button size="sm" className="gap-1">
-            <Download className="w-4 h-4" />
-            Download PDF
+          <Button size="sm" className="gap-1" onClick={handleDownloadPdf} disabled={downloading}>
+            {downloading ? (
+              <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin shrink-0" />
+            ) : (
+              <Download className="w-4 h-4" />
+            )}
+            {downloading ? "Generating..." : "Download PDF"}
           </Button>
         </div>
       </div>

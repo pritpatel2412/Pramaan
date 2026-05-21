@@ -1,6 +1,31 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import * as schema from "./schema";
+import { join } from "path";
+import fs from "fs";
+
+// Robustly load env file
+const tryLoadEnv = (dir: string) => {
+  const envPath = join(dir, ".env");
+  if (fs.existsSync(envPath)) {
+    try {
+      process.loadEnvFile(envPath);
+      return true;
+    } catch (e) {
+      // Ignore
+    }
+  }
+  return false;
+};
+
+let current = process.cwd();
+for (let i = 0; i < 4; i++) {
+  if (tryLoadEnv(current)) break;
+  current = join(current, "..");
+}
+try {
+  tryLoadEnv(__dirname);
+} catch {}
 
 const { Pool } = pg;
 
