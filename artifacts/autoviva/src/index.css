@@ -66,8 +66,6 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap');
-
 /* LIGHT MODE - We default to dark mode, so light mode is just a generic fallback here */
 :root {
   --button-outline: rgba(0,0,0, .10);

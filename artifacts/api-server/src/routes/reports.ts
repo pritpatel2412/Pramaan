@@ -8,21 +8,22 @@ import { askVivaAgent } from "../lib/ai";
 const router = Router();
 
 router.get("/runs/:runId/report", requireAuth, async (req, res) => {
+  const runId = req.params.runId as string;
   const [run] = await db.select().from(testRunsTable)
-    .where(and(eq(testRunsTable.id, req.params.runId), eq(testRunsTable.userId, req.user!.userId))).limit(1);
+    .where(and(eq(testRunsTable.id, runId), eq(testRunsTable.userId, req.user!.userId))).limit(1);
   if (!run) {
     res.status(404).json({ error: "Run not found" });
     return;
   }
 
-  const [report] = await db.select().from(reportsTable).where(eq(reportsTable.runId, req.params.runId)).limit(1);
+  const [report] = await db.select().from(reportsTable).where(eq(reportsTable.runId, runId)).limit(1);
   if (!report) {
     res.status(404).json({ error: "Report not ready yet" });
     return;
   }
 
-  const results = await db.select().from(testResultsTable).where(eq(testResultsTable.runId, req.params.runId));
-  const screenshots = await db.select().from(screenshotsTable).where(eq(screenshotsTable.runId, req.params.runId));
+  const results = await db.select().from(testResultsTable).where(eq(testResultsTable.runId, runId));
+  const screenshots = await db.select().from(screenshotsTable).where(eq(screenshotsTable.runId, runId));
   const screenshotsByResult = new Map<string, typeof screenshots>();
   for (const s of screenshots) {
     const key = s.resultId ?? "no-result";
@@ -52,8 +53,9 @@ router.get("/runs/:runId/report", requireAuth, async (req, res) => {
 });
 
 router.post("/runs/:runId/ask", requireAuth, async (req, res) => {
+  const runId = req.params.runId as string;
   const [run] = await db.select().from(testRunsTable)
-    .where(and(eq(testRunsTable.id, req.params.runId), eq(testRunsTable.userId, req.user!.userId))).limit(1);
+    .where(and(eq(testRunsTable.id, runId), eq(testRunsTable.userId, req.user!.userId))).limit(1);
   if (!run) {
     res.status(404).json({ error: "Run not found" });
     return;
@@ -65,21 +67,16 @@ router.post("/runs/:runId/ask", requireAuth, async (req, res) => {
     return;
   }
 
-  const [report] = await db.select().from(reportsTable).where(eq(reportsTable.runId, req.params.runId)).limit(1);
-  const results = await db.select().from(testResultsTable).where(eq(testResultsTable.runId, req.params.runId));
+  const [report] = await db.select().from(reportsTable).where(eq(reportsTable.runId, runId)).limit(1);
+  const results = await db.select().from(testResultsTable).where(eq(testResultsTable.runId, runId));
 
-  try {
-    const answer = await askVivaAgent({
-      question: parsed.data.question,
-      run,
-      report,
-      results,
-    });
-    res.json({ answer, evidenceScreenshots: [], referencedTestCases: [] });
-  } catch (err) {
-    req.log.error({ err }, "Viva agent failed");
-    res.status(500).json({ error: "Failed to get answer from Viva agent" });
-  }
+  const answer = await askVivaAgent({
+    question: parsed.data.question,
+    run,
+    report,
+    results,
+  });
+  res.json({ answer, evidenceScreenshots: [], referencedTestCases: [] });
 });
 
 export default router;

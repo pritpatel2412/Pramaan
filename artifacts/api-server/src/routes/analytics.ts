@@ -56,7 +56,6 @@ router.get("/analytics/overview", requireAuth, async (req, res) => {
     ? (runStats.totalPassed / runStats.totalTests) * 100
     : null;
 
-  // Score distribution by grade
   const gradeDistRaw = await db.select({
     grade: testRunsTable.grade,
     count: sql<number>`count(*)::int`,
@@ -69,7 +68,6 @@ router.get("/analytics/overview", requireAuth, async (req, res) => {
     count: gradeDistRaw.find(r => r.grade === grade)?.count ?? 0,
   }));
 
-  // Projects comparison
   const projects = await db.select().from(projectsTable).where(eq(projectsTable.userId, userId));
   const projectsComparison = await Promise.all(projects.slice(0, 10).map(async p => {
     const runs = await db.select().from(testRunsTable)
@@ -107,8 +105,9 @@ router.get("/analytics/overview", requireAuth, async (req, res) => {
 });
 
 router.get("/analytics/projects/:projectId", requireAuth, async (req, res) => {
+  const projectId = req.params.projectId as string;
   const [project] = await db.select().from(projectsTable)
-    .where(and(eq(projectsTable.id, req.params.projectId), eq(projectsTable.userId, req.user!.userId))).limit(1);
+    .where(and(eq(projectsTable.id, projectId), eq(projectsTable.userId, req.user!.userId))).limit(1);
   if (!project) {
     res.status(404).json({ error: "Project not found" });
     return;
@@ -119,13 +118,13 @@ router.get("/analytics/projects/:projectId", requireAuth, async (req, res) => {
     max: sql<number>`max(score)`,
     totalPassed: sql<number>`sum(passed)::int`,
     totalTests: sql<number>`sum(total_tests)::int`,
-  }).from(testRunsTable).where(and(eq(testRunsTable.projectId, req.params.projectId), eq(testRunsTable.status, "completed")));
+  }).from(testRunsTable).where(and(eq(testRunsTable.projectId, projectId), eq(testRunsTable.status, "completed")));
   const [latest] = await db.select().from(testRunsTable)
-    .where(and(eq(testRunsTable.projectId, req.params.projectId), eq(testRunsTable.status, "completed")))
+    .where(and(eq(testRunsTable.projectId, projectId), eq(testRunsTable.status, "completed")))
     .orderBy(desc(testRunsTable.createdAt)).limit(1);
 
   res.json({
-    projectId: req.params.projectId,
+    projectId,
     totalRuns: stats?.count ?? 0,
     bestScore: stats?.max ?? null,
     latestScore: latest?.score ?? null,

@@ -18,8 +18,9 @@ function encrypt(text: string): string {
 }
 
 router.get("/projects/:projectId/credentials", requireAuth, async (req, res) => {
+  const projectId = req.params.projectId as string;
   const [project] = await db.select().from(projectsTable)
-    .where(and(eq(projectsTable.id, req.params.projectId), eq(projectsTable.userId, req.user!.userId))).limit(1);
+    .where(and(eq(projectsTable.id, projectId), eq(projectsTable.userId, req.user!.userId))).limit(1);
   if (!project) {
     res.status(404).json({ error: "Project not found" });
     return;
@@ -29,13 +30,14 @@ router.get("/projects/:projectId/credentials", requireAuth, async (req, res) => 
     projectId: credentialsTable.projectId,
     role: credentialsTable.role,
     username: credentialsTable.username,
-  }).from(credentialsTable).where(eq(credentialsTable.projectId, req.params.projectId));
+  }).from(credentialsTable).where(eq(credentialsTable.projectId, projectId));
   res.json(creds);
 });
 
 router.post("/projects/:projectId/credentials", requireAuth, async (req, res) => {
+  const projectId = req.params.projectId as string;
   const [project] = await db.select().from(projectsTable)
-    .where(and(eq(projectsTable.id, req.params.projectId), eq(projectsTable.userId, req.user!.userId))).limit(1);
+    .where(and(eq(projectsTable.id, projectId), eq(projectsTable.userId, req.user!.userId))).limit(1);
   if (!project) {
     res.status(404).json({ error: "Project not found" });
     return;
@@ -47,7 +49,7 @@ router.post("/projects/:projectId/credentials", requireAuth, async (req, res) =>
   }
   const { role, username, password } = parsed.data;
   const [cred] = await db.insert(credentialsTable).values({
-    projectId: req.params.projectId,
+    projectId,
     role,
     username,
     passwordEncrypted: encrypt(password),
@@ -56,15 +58,17 @@ router.post("/projects/:projectId/credentials", requireAuth, async (req, res) =>
 });
 
 router.delete("/projects/:projectId/credentials/:credentialId", requireAuth, async (req, res) => {
+  const projectId = req.params.projectId as string;
+  const credentialId = req.params.credentialId as string;
   const [project] = await db.select().from(projectsTable)
-    .where(and(eq(projectsTable.id, req.params.projectId), eq(projectsTable.userId, req.user!.userId))).limit(1);
+    .where(and(eq(projectsTable.id, projectId), eq(projectsTable.userId, req.user!.userId))).limit(1);
   if (!project) {
     res.status(404).json({ error: "Project not found" });
     return;
   }
   await db.delete(credentialsTable).where(and(
-    eq(credentialsTable.id, req.params.credentialId),
-    eq(credentialsTable.projectId, req.params.projectId)
+    eq(credentialsTable.id, credentialId),
+    eq(credentialsTable.projectId, projectId)
   ));
   res.json({ message: "Credential deleted" });
 });

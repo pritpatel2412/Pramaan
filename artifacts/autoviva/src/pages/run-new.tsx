@@ -43,9 +43,10 @@ export default function RunNew() {
   const [mode, setMode] = useState<EvalMode>("live_demo");
   const [error, setError] = useState<string | null>(null);
 
-  const { data: projects, isLoading: projectsLoading } = useListProjects({
-    query: { queryKey: getListProjectsQueryKey() }
-  });
+  const { data: projects, isLoading: projectsLoading } = useListProjects(
+    undefined,
+    { query: { queryKey: getListProjectsQueryKey() } }
+  );
 
   const { data: suites, isLoading: suitesLoading } = useListTestSuites(
     selectedProjectId,

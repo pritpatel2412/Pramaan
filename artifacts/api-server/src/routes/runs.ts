@@ -79,14 +79,13 @@ router.post("/runs/start", requireAuth, async (req, res) => {
     startedAt: new Date(),
   }).returning();
 
-  // Simulate async evaluation
   simulateEvaluation(run.id, testCases, project, suite, req.user!.userId).catch(console.error);
 
-  const [projectData] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId)).limit(1);
-  res.status(201).json({ ...run, projectName: projectData?.name ?? null, suiteName: suite?.name ?? null });
+  res.status(201).json({ ...run, projectName: project.name, suiteName: suite.name });
 });
 
 router.get("/runs/:runId", requireAuth, async (req, res) => {
+  const runId = req.params.runId as string;
   const [row] = await db.select({
     run: testRunsTable,
     projectName: projectsTable.name,
@@ -94,7 +93,7 @@ router.get("/runs/:runId", requireAuth, async (req, res) => {
   }).from(testRunsTable)
     .leftJoin(projectsTable, eq(testRunsTable.projectId, projectsTable.id))
     .leftJoin(testSuitesTable, eq(testRunsTable.suiteId, testSuitesTable.id))
-    .where(and(eq(testRunsTable.id, req.params.runId), eq(testRunsTable.userId, req.user!.userId)))
+    .where(and(eq(testRunsTable.id, runId), eq(testRunsTable.userId, req.user!.userId)))
     .limit(1);
 
   if (!row) {
@@ -105,14 +104,15 @@ router.get("/runs/:runId", requireAuth, async (req, res) => {
 });
 
 router.get("/runs/:runId/results", requireAuth, async (req, res) => {
+  const runId = req.params.runId as string;
   const [run] = await db.select().from(testRunsTable)
-    .where(and(eq(testRunsTable.id, req.params.runId), eq(testRunsTable.userId, req.user!.userId))).limit(1);
+    .where(and(eq(testRunsTable.id, runId), eq(testRunsTable.userId, req.user!.userId))).limit(1);
   if (!run) {
     res.status(404).json({ error: "Run not found" });
     return;
   }
-  const results = await db.select().from(testResultsTable).where(eq(testResultsTable.runId, req.params.runId));
-  const screenshots = await db.select().from(screenshotsTable).where(eq(screenshotsTable.runId, req.params.runId));
+  const results = await db.select().from(testResultsTable).where(eq(testResultsTable.runId, runId));
+  const screenshots = await db.select().from(screenshotsTable).where(eq(screenshotsTable.runId, runId));
   const screenshotsByResult = new Map<string, typeof screenshots>();
   for (const s of screenshots) {
     const key = s.resultId ?? "no-result";
@@ -126,13 +126,14 @@ router.get("/runs/:runId/results", requireAuth, async (req, res) => {
 });
 
 router.post("/runs/:runId/stop", requireAuth, async (req, res) => {
+  const runId = req.params.runId as string;
   const [run] = await db.select().from(testRunsTable)
-    .where(and(eq(testRunsTable.id, req.params.runId), eq(testRunsTable.userId, req.user!.userId))).limit(1);
+    .where(and(eq(testRunsTable.id, runId), eq(testRunsTable.userId, req.user!.userId))).limit(1);
   if (!run) {
     res.status(404).json({ error: "Run not found" });
     return;
   }
-  await db.update(testRunsTable).set({ status: "failed", completedAt: new Date() }).where(eq(testRunsTable.id, req.params.runId));
+  await db.update(testRunsTable).set({ status: "failed", completedAt: new Date() }).where(eq(testRunsTable.id, runId));
   res.json({ message: "Run stopped" });
 });
 
@@ -182,7 +183,6 @@ async function simulateEvaluation(runId: string, testCases: any[], project: any,
     completedAt: new Date(),
   }).where(eq(testRunsTable.id, runId));
 
-  // Generate report
   try {
     const report = await generateEvaluationReport({ runId, score, grade, passed, failed, testCases, project, suite });
     await db.insert(reportsTable).values({
@@ -197,7 +197,6 @@ async function simulateEvaluation(runId: string, testCases: any[], project: any,
     });
   } catch (err) {
     console.error("Report generation failed:", err);
-    // Still save a basic report
     await db.insert(reportsTable).values({
       runId,
       summary: `Evaluation completed. ${passed} of ${testCases.length} test cases passed with a score of ${score}/100.`,

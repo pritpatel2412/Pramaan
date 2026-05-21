@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, projectsTable, testSuitesTable, testRunsTable, credentialsTable } from "@workspace/db";
+import { db, projectsTable, testSuitesTable, testRunsTable } from "@workspace/db";
 import { eq, and, sql, desc } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
 import { CreateProjectBody, UpdateProjectBody } from "@workspace/api-zod";
@@ -95,8 +95,9 @@ router.post("/projects", requireAuth, async (req, res) => {
 });
 
 router.get("/projects/:projectId", requireAuth, async (req, res) => {
+  const projectId = req.params.projectId as string;
   const [project] = await db.select().from(projectsTable)
-    .where(and(eq(projectsTable.id, req.params.projectId), eq(projectsTable.userId, req.user!.userId)))
+    .where(and(eq(projectsTable.id, projectId), eq(projectsTable.userId, req.user!.userId)))
     .limit(1);
   if (!project) {
     res.status(404).json({ error: "Project not found" });
@@ -120,32 +121,34 @@ router.get("/projects/:projectId", requireAuth, async (req, res) => {
 });
 
 router.put("/projects/:projectId", requireAuth, async (req, res) => {
+  const projectId = req.params.projectId as string;
   const parsed = UpdateProjectBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid request body" });
     return;
   }
   const [existing] = await db.select().from(projectsTable)
-    .where(and(eq(projectsTable.id, req.params.projectId), eq(projectsTable.userId, req.user!.userId))).limit(1);
+    .where(and(eq(projectsTable.id, projectId), eq(projectsTable.userId, req.user!.userId))).limit(1);
   if (!existing) {
     res.status(404).json({ error: "Project not found" });
     return;
   }
   const [updated] = await db.update(projectsTable)
     .set({ ...parsed.data, updatedAt: new Date() })
-    .where(eq(projectsTable.id, req.params.projectId))
+    .where(eq(projectsTable.id, projectId))
     .returning();
   res.json({ ...updated, testSuiteCount: null, runCount: null, avgScore: null, lastRunAt: null, lastRunScore: null, lastRunGrade: null });
 });
 
 router.delete("/projects/:projectId", requireAuth, async (req, res) => {
+  const projectId = req.params.projectId as string;
   const [existing] = await db.select().from(projectsTable)
-    .where(and(eq(projectsTable.id, req.params.projectId), eq(projectsTable.userId, req.user!.userId))).limit(1);
+    .where(and(eq(projectsTable.id, projectId), eq(projectsTable.userId, req.user!.userId))).limit(1);
   if (!existing) {
     res.status(404).json({ error: "Project not found" });
     return;
   }
-  await db.delete(projectsTable).where(eq(projectsTable.id, req.params.projectId));
+  await db.delete(projectsTable).where(eq(projectsTable.id, projectId));
   res.json({ message: "Project deleted" });
 });
 
