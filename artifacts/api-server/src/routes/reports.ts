@@ -124,6 +124,7 @@ router.get("/runs/:runId/report", requireAuth, async (req, res) => {
     keyFindings: report.keyFindings ?? [],
     bugsFound: report.bugsFound ?? [],
     featureCoverage: report.featureCoverage ?? [],
+    audits: (report as any).audits ?? {},
     run,
     results: enrichedResults,
     generatedAt: report.generatedAt,

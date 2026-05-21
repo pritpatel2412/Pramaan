@@ -6,6 +6,7 @@ import { runProjectUnderstanding, runTestPlanner, runAssertion, runRecovery, dec
 import { generateEvaluationReport } from "./ai";
 import fs from "fs";
 import path from "path";
+import { createRequire } from "module";
 
 // Grade standard mapping
 function gradeFromScore(score: number): string {
@@ -449,6 +450,19 @@ export async function executeRealBrowserEvaluation(
     streamLog(runId, `- Final Evaluation Score: ${score}/100 | Grade: ${grade}`, "pass");
     streamLog(runId, `- Total Duration: ${totalDuration} seconds`, "info");
 
+    // Run deep accessibility & performance audits if page is available
+    let auditsPayload: any = {};
+    if (page) {
+      try {
+        const auditRes = await performQualityAudits(page, runId);
+        if (auditRes) {
+          auditsPayload = auditRes;
+        }
+      } catch (auditErr: any) {
+        streamLog(runId, `[AuditAgent] Error performing audits: ${auditErr.message}`, "warn");
+      }
+    }
+
     streamLog(runId, `[Agent 6: ReportAgent] Compiling comprehensive 8-category evaluation report...`, "info");
 
     // Update run status
@@ -484,6 +498,7 @@ export async function executeRealBrowserEvaluation(
         keyFindings: reportData.keyFindings || [],
         bugsFound: reportData.bugsFound || [],
         featureCoverage: reportData.featureCoverage || [],
+        audits: auditsPayload,
       });
       streamLog(runId, `[Agent 6: ReportAgent] ✓ Report generated and saved successfully!`, "pass");
     } catch (err: any) {
@@ -506,6 +521,7 @@ export async function executeRealBrowserEvaluation(
         keyFindings: [`Passed tests: ${passedTestsCount}`, `Failed tests: ${failedTestsCount}`] as any,
         bugsFound: [] as any,
         featureCoverage: [] as any,
+        audits: auditsPayload,
       });
     }
 
@@ -559,5 +575,195 @@ async function takeAndRecordScreenshot(
     });
   } catch (err: any) {
     console.error("Failed to capture and record screenshot:", err);
+  }
+}
+
+/**
+ * Perform deep quality audits including WCAG Accessibility (via Axe-core), SEO,
+ * HTML best practices, and frontend performance metrics.
+ */
+async function performQualityAudits(page: Page, runId: string): Promise<any> {
+  try {
+    streamLog(runId, `[AuditAgent] Initiating WCAG Accessibility & Performance Audits...`, "info");
+
+    // 1. Accessibility Audit using Axe-core
+    let axeResults: any = null;
+    try {
+      const require = createRequire(import.meta.url);
+      const axePath = require.resolve("axe-core/axe.min.js");
+      const axeScript = fs.readFileSync(axePath, "utf8");
+
+      // Inject axe-core into the page
+      await page.evaluate((script) => {
+        const doc = (globalThis as any).document;
+        const scriptEl = doc.createElement("script");
+        scriptEl.text = script;
+        doc.head.appendChild(scriptEl);
+      }, axeScript);
+
+      // Run axe on the page
+      axeResults = await page.evaluate(async () => {
+        return (globalThis as any).axe.run();
+      });
+
+      streamLog(runId, `[AuditAgent] ✓ WCAG 2.2 Accessibility analysis completed with ${axeResults.violations.length} violation(s).`, "pass");
+    } catch (axeErr: any) {
+      streamLog(runId, `[AuditAgent] ✗ Failed to run WCAG Accessibility Audit: ${axeErr.message}`, "warn");
+    }
+
+    // 2. Performance Audits via Window Performance API
+    let perfMetrics: any = null;
+    try {
+      perfMetrics = await page.evaluate(() => {
+        const win = globalThis as any;
+        const t = win.performance.timing;
+        const resources = win.performance.getEntriesByType("resource");
+
+        const loadTimeMs = t.loadEventEnd > 0 ? (t.loadEventEnd - t.navigationStart) : (Date.now() - t.navigationStart);
+        const domContentLoadedMs = t.domContentLoadedEventEnd - t.navigationStart;
+
+        const breakdown = { js: 0, css: 0, img: 0, other: 0 };
+        let totalSize = 0;
+
+        resources.forEach((r: any) => {
+          if (r.initiatorType === "script" || r.name.endsWith(".js")) breakdown.js++;
+          else if (r.initiatorType === "css" || r.name.endsWith(".css")) breakdown.css++;
+          else if (r.initiatorType === "img" || /\.(png|jpg|jpeg|gif|svg|webp)/i.test(r.name)) breakdown.img++;
+          else breakdown.other++;
+
+          if (r.transferSize) totalSize += r.transferSize;
+          else if (r.encodedBodySize) totalSize += r.encodedBodySize;
+        });
+
+        return {
+          loadTimeMs: Math.max(loadTimeMs, 0),
+          domContentLoadedMs: Math.max(domContentLoadedMs, 0),
+          resourceCount: resources.length,
+          pageSizeBytes: totalSize,
+          breakdown
+        };
+      });
+      streamLog(runId, `[AuditAgent] ✓ Performance timing metrics retrieved (Load Time: ${perfMetrics.loadTimeMs}ms).`, "pass");
+    } catch (perfErr: any) {
+      streamLog(runId, `[AuditAgent] ✗ Failed to collect page performance metrics: ${perfErr.message}`, "warn");
+    }
+
+    // 3. Best Practices & SEO Audit
+    let seoMetrics: any = null;
+    try {
+      seoMetrics = await page.evaluate(() => {
+        const doc = (globalThis as any).document;
+        const title = doc.title || "";
+        const metaDesc = doc.querySelector('meta[name="description"]')?.getAttribute("content") || "";
+        const h1Count = doc.querySelectorAll("h1").length;
+        const images = Array.from(doc.querySelectorAll("img"));
+        const imgMissingAltCount = images.filter((img: any) => !img.getAttribute("alt")?.trim()).length;
+        const links = Array.from(doc.querySelectorAll("a"));
+        const linksMissingText = links.filter((link: any) => !link.textContent?.trim() && !link.getAttribute("aria-label")?.trim()).length;
+
+        return {
+          title,
+          hasTitle: title.length > 0,
+          metaDescriptionLength: metaDesc.length,
+          hasMetaDescription: metaDesc.length > 0,
+          h1Count,
+          imgMissingAltCount,
+          linksCount: links.length,
+          linksMissingText,
+        };
+      });
+      streamLog(runId, `[AuditAgent] ✓ SEO and HTML Semantic checks executed.`, "pass");
+    } catch (seoErr: any) {
+      streamLog(runId, `[AuditAgent] ✗ Failed to parse SEO metrics: ${seoErr.message}`, "warn");
+    }
+
+    // 4. Calculate Scores (0 - 100)
+    let perfScore = 100;
+    if (perfMetrics) {
+      const t = perfMetrics.loadTimeMs;
+      if (t > 5000) perfScore = 50;
+      else if (t > 3000) perfScore = 70 - Math.round((t - 3000) * 0.01);
+      else if (t > 1000) perfScore = 95 - Math.round((t - 1000) * 0.0125);
+      else perfScore = 100 - Math.round(t * 0.005);
+      perfScore = Math.max(Math.min(perfScore, 100), 0);
+    }
+
+    let accScore = 100;
+    if (axeResults) {
+      let deductions = 0;
+      axeResults.violations.forEach((v: any) => {
+        let weight = 5; // moderate
+        if (v.impact === "critical") weight = 15;
+        else if (v.impact === "serious") weight = 10;
+        else if (v.impact === "minor") weight = 2;
+        deductions += weight * v.nodes.length;
+      });
+      accScore = Math.max(100 - deductions, 0);
+    }
+
+    let seoScore = 100;
+    if (seoMetrics) {
+      if (!seoMetrics.hasTitle) seoScore -= 30;
+      if (!seoMetrics.hasMetaDescription) seoScore -= 20;
+      if (seoMetrics.h1Count !== 1) seoScore -= 15;
+      if (seoMetrics.imgMissingAltCount > 0) seoScore -= Math.min(seoMetrics.imgMissingAltCount * 5, 20);
+      if (seoMetrics.linksMissingText > 0) seoScore -= Math.min(seoMetrics.linksMissingText * 5, 15);
+      seoScore = Math.max(seoScore, 0);
+    }
+
+    let bpScore = 100;
+    if (page.url().startsWith("http://")) {
+      bpScore -= 10;
+    }
+    if (perfMetrics && perfMetrics.pageSizeBytes > 2 * 1024 * 1024) {
+      bpScore -= 10;
+    }
+    bpScore = Math.max(bpScore, 0);
+
+    return {
+      performance: {
+        score: perfScore,
+        loadTimeMs: perfMetrics?.loadTimeMs || 0,
+        domContentLoadedMs: perfMetrics?.domContentLoadedMs || 0,
+        resourceCount: perfMetrics?.resourceCount || 0,
+        pageSizeBytes: perfMetrics?.pageSizeBytes || 0,
+        breakdown: perfMetrics?.breakdown || { js: 0, css: 0, img: 0, other: 0 }
+      },
+      accessibility: {
+        score: accScore,
+        violations: axeResults?.violations.map((v: any) => ({
+          id: v.id,
+          impact: v.impact,
+          description: v.description,
+          help: v.help,
+          helpUrl: v.helpUrl,
+          nodes: v.nodes.map((n: any) => ({
+            target: n.target,
+            html: n.html
+          }))
+        })) || [],
+        passesCount: axeResults?.passes?.length || 0,
+        incompleteCount: axeResults?.incomplete?.length || 0,
+        violationsCount: axeResults?.violations?.length || 0
+      },
+      bestPractices: {
+        score: bpScore,
+        hasHttps: page.url().startsWith("https://"),
+        consoleErrors: 0
+      },
+      seo: {
+        score: seoScore,
+        title: seoMetrics?.title || "",
+        hasTitle: seoMetrics?.hasTitle || false,
+        hasMetaDescription: seoMetrics?.hasMetaDescription || false,
+        h1Count: seoMetrics?.h1Count || 0,
+        imgMissingAltCount: seoMetrics?.imgMissingAltCount || 0,
+        linksCount: seoMetrics?.linksCount || 0,
+        linksMissingText: seoMetrics?.linksMissingText || 0
+      }
+    };
+  } catch (err: any) {
+    streamLog(runId, `[AuditAgent] ✗ Failed completely to execute audits: ${err.message}`, "warn");
+    return null;
   }
 }

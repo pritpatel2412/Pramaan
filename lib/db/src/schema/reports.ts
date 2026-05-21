@@ -15,6 +15,7 @@ export const reportsTable = pgTable("reports", {
   keyFindings: jsonb("key_findings").default([]),
   bugsFound: jsonb("bugs_found").default([]),
   featureCoverage: jsonb("feature_coverage").default([]),
+  audits: jsonb("audits").default({}),
   generatedAt: timestamp("generated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

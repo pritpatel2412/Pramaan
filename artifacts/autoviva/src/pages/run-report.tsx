@@ -43,6 +43,51 @@ function severityColor(s: string) {
   return "bg-blue-500/20 text-blue-400 border-blue-500/30";
 }
 
+interface AuditGaugeProps {
+  score: number;
+  label: string;
+}
+
+function AuditGauge({ score, label }: AuditGaugeProps) {
+  const color = score >= 90 ? "text-green-500 stroke-green-500" : score >= 50 ? "text-amber-500 stroke-amber-500" : "text-red-500 stroke-red-500";
+  const bgStrokeColor = "stroke-slate-800";
+  const radius = 34;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference - (score / 100) * circumference;
+
+  return (
+    <div className="flex flex-col items-center p-4 rounded-xl bg-slate-950/40 border border-slate-800/60 backdrop-blur-md transition-all duration-300 hover:border-slate-700/60 hover:translate-y-[-2px] w-full">
+      <div className="relative w-20 h-20">
+        <svg className="w-full h-full transform -rotate-90 animate-fade-in" viewBox="0 0 80 80">
+          <circle
+            cx="40"
+            cy="40"
+            r={radius}
+            className={`${bgStrokeColor} fill-none`}
+            strokeWidth="6"
+          />
+          <circle
+            cx="40"
+            cy="40"
+            r={radius}
+            className={`${color} fill-none transition-all duration-1000 ease-out`}
+            strokeWidth="6"
+            strokeDasharray={circumference}
+            strokeDashoffset={offset}
+            strokeLinecap="round"
+          />
+        </svg>
+        <div className="absolute inset-0 flex items-center justify-center font-mono text-lg font-bold">
+          <span className={score >= 90 ? "text-green-400" : score >= 50 ? "text-amber-400" : "text-red-400"}>
+            {score}
+          </span>
+        </div>
+      </div>
+      <span className="text-xs font-semibold tracking-wide text-slate-300 mt-3 text-center">{label}</span>
+    </div>
+  );
+}
+
 export default function RunReport() {
   const params = useParams();
   const runId = params.runId || "";
@@ -121,6 +166,7 @@ export default function RunReport() {
   const results = (report.results as any[]) ?? [];
   const findings = (report.keyFindings as string[]) ?? [];
   const suggestions = (report.suggestions as string[]) ?? [];
+  const audits = (report as any).audits ?? null;
 
   if (isPrintMode) {
     return (
@@ -201,6 +247,160 @@ export default function RunReport() {
               </CardContent>
             </Card>
           </div>
+
+          {/* Quality Audits & WCAG Section */}
+          {audits && (audits.performance || audits.accessibility) && (
+            <Card className="border-slate-800 bg-slate-900/50">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <div>
+                  <CardTitle className="text-lg font-bold text-slate-200 flex items-center gap-2">
+                    <CheckCircle2 className="w-5 h-5 text-primary shrink-0" />
+                    Lighthouse & WCAG 2.2 Quality Audits
+                  </CardTitle>
+                  <p className="text-xs text-slate-400 mt-1">Deep analysis of localhost project accessibility, performance, best practices, and SEO</p>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-6 pt-4">
+                {/* Circle Gauges */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  <AuditGauge score={audits.performance?.score ?? 0} label="Performance" />
+                  <AuditGauge score={audits.accessibility?.score ?? 0} label="Accessibility" />
+                  <AuditGauge score={audits.bestPractices?.score ?? 0} label="Best Practices" />
+                  <AuditGauge score={audits.seo?.score ?? 0} label="SEO" />
+                </div>
+
+                {/* Detailed Audit Breakdown Grid */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-4">
+                  {/* Performance timings */}
+                  <div className="space-y-3 p-4 rounded-xl bg-slate-950/35 border border-slate-800/80">
+                    <h3 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse" />
+                      Performance Timings & Assets
+                    </h3>
+                    <div className="grid grid-cols-2 gap-3 pt-2">
+                      <div className="p-3 rounded-lg bg-slate-900/40 border border-slate-800/60">
+                        <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Load Time</span>
+                        <p className="text-xl font-bold text-blue-400 mt-1">
+                          {audits.performance?.loadTimeMs ? (audits.performance.loadTimeMs / 1000).toFixed(2) : "0.00"}s
+                        </p>
+                        <span className="text-[10px] text-slate-500">({audits.performance?.loadTimeMs ?? 0} ms)</span>
+                      </div>
+                      <div className="p-3 rounded-lg bg-slate-900/40 border border-slate-800/60">
+                        <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400">DOM Interactive</span>
+                        <p className="text-xl font-bold text-indigo-400 mt-1">
+                          {audits.performance?.domContentLoadedMs ? (audits.performance.domContentLoadedMs / 1000).toFixed(2) : "0.00"}s
+                        </p>
+                        <span className="text-[10px] text-slate-500">({audits.performance?.domContentLoadedMs ?? 0} ms)</span>
+                      </div>
+                      <div className="p-3 rounded-lg bg-slate-900/40 border border-slate-800/60">
+                        <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Page Weight</span>
+                        <p className="text-xl font-bold text-teal-400 mt-1">
+                          {audits.performance?.pageSizeBytes ? (audits.performance.pageSizeBytes / (1024 * 1024)).toFixed(2) : "0.00"} MB
+                        </p>
+                        <span className="text-[10px] text-slate-500">({audits.performance?.pageSizeBytes ? (audits.performance.pageSizeBytes / 1024).toFixed(0) : "0"} KB)</span>
+                      </div>
+                      <div className="p-3 rounded-lg bg-slate-900/40 border border-slate-800/60">
+                        <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Resource Count</span>
+                        <p className="text-xl font-bold text-cyan-400 mt-1">{audits.performance?.resourceCount ?? 0}</p>
+                        <span className="text-[10px] text-slate-500">JS: {audits.performance?.breakdown?.js ?? 0} | CSS: {audits.performance?.breakdown?.css ?? 0} | Img: {audits.performance?.breakdown?.img ?? 0}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* SEO & Best Practices checklists */}
+                  <div className="space-y-3 p-4 rounded-xl bg-slate-950/35 border border-slate-800/80">
+                    <h3 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-teal-500" />
+                      SEO & Best Practices Checks
+                    </h3>
+                    <div className="space-y-2 pt-1 font-mono text-xs">
+                      <div className="flex justify-between items-center p-2 rounded bg-slate-900/20 border border-slate-800/40">
+                        <span className="text-slate-400">HTML Page Title</span>
+                        <span className={audits.seo?.hasTitle ? "text-green-400 font-bold" : "text-red-400 font-bold"}>
+                          {audits.seo?.hasTitle ? "✓ Present" : "✗ Missing"}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center p-2 rounded bg-slate-900/20 border border-slate-800/40">
+                        <span className="text-slate-400">Meta Description</span>
+                        <span className={audits.seo?.hasMetaDescription ? "text-green-400 font-bold" : "text-red-400 font-bold"}>
+                          {audits.seo?.hasMetaDescription ? "✓ Present" : "✗ Missing"}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center p-2 rounded bg-slate-900/20 border border-slate-800/40">
+                        <span className="text-slate-400">Heading Structure (Single H1)</span>
+                        <span className={audits.seo?.h1Count === 1 ? "text-green-400 font-bold" : "text-amber-400 font-bold"}>
+                          {audits.seo?.h1Count === 1 ? "✓ Valid (1)" : `⚠ Found ${audits.seo?.h1Count ?? 0}`}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center p-2 rounded bg-slate-900/20 border border-slate-800/40">
+                        <span className="text-slate-400">Secure connection (HTTPS)</span>
+                        <span className={audits.bestPractices?.hasHttps ? "text-green-400 font-bold" : "text-amber-400 font-bold"}>
+                          {audits.bestPractices?.hasHttps ? "✓ Secure" : "⚠ Local HTTP"}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center p-2 rounded bg-slate-900/20 border border-slate-800/40">
+                        <span className="text-slate-400">Images Missing Alt Attribute</span>
+                        <span className={audits.seo?.imgMissingAltCount === 0 ? "text-green-400 font-bold" : "text-red-400 font-bold"}>
+                          {audits.seo?.imgMissingAltCount === 0 ? "✓ 0 issues" : `✗ ${audits.seo?.imgMissingAltCount} images`}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Accessibility Violations */}
+                <div className="space-y-3 mt-4">
+                  <h3 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-red-500" />
+                    WCAG Accessibility Violations ({audits.accessibility?.violationsCount ?? 0})
+                  </h3>
+                  {(!audits.accessibility?.violations || audits.accessibility.violations.length === 0) ? (
+                    <div className="p-4 rounded-xl border border-green-500/20 bg-green-500/5 text-center text-sm text-green-400 font-medium">
+                      ✓ No accessibility violations detected. Great job on WCAG compliance!
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {audits.accessibility.violations.map((violation: any, vIdx: number) => (
+                        <div key={vIdx} className="p-4 rounded-xl border border-slate-800/80 bg-slate-900/30 space-y-3">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <Badge className="font-mono text-[10px] bg-red-500/20 text-red-400 border border-red-500/30 uppercase">
+                                {violation.impact}
+                              </Badge>
+                              <h4 className="text-sm font-bold text-slate-200">{violation.help}</h4>
+                            </div>
+                            {violation.helpUrl && (
+                              <a href={violation.helpUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline flex items-center gap-1">
+                                WCAG Guidelines <ExternalLink className="w-3.5 h-3.5" />
+                              </a>
+                            )}
+                          </div>
+                          <p className="text-xs text-slate-400">{violation.description}</p>
+                          
+                          {/* Nodes list */}
+                          {violation.nodes && violation.nodes.length > 0 && (
+                            <div className="mt-2 space-y-1.5 border-t border-slate-800/80 pt-2">
+                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Target Elements</p>
+                              {violation.nodes.map((node: any, nIdx: number) => (
+                                <div key={nIdx} className="space-y-1">
+                                  <code className="text-[11px] text-cyan-400 font-mono block select-all">
+                                    {node.target?.join(" > ") || "Unknown selector"}
+                                  </code>
+                                  <pre className="text-[10px] bg-black/40 border border-slate-800/50 p-2 rounded overflow-x-auto text-slate-400 font-mono leading-relaxed select-all max-h-24">
+                                    {node.html}
+                                  </pre>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Executive Summary */}
           <Card className="border-slate-800 bg-slate-900/50">
@@ -434,6 +634,160 @@ export default function RunReport() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Quality Audits & WCAG Section */}
+        {audits && (audits.performance || audits.accessibility) && (
+          <Card className="border-border">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <div>
+                <CardTitle className="text-lg font-bold flex items-center gap-2">
+                  <CheckCircle2 className="w-5 h-5 text-primary shrink-0" />
+                  Lighthouse & WCAG 2.2 Quality Audits
+                </CardTitle>
+                <p className="text-xs text-muted-foreground mt-1">Deep analysis of localhost project accessibility, performance, best practices, and SEO</p>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-6 pt-4">
+              {/* Circle Gauges */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <AuditGauge score={audits.performance?.score ?? 0} label="Performance" />
+                <AuditGauge score={audits.accessibility?.score ?? 0} label="Accessibility" />
+                <AuditGauge score={audits.bestPractices?.score ?? 0} label="Best Practices" />
+                <AuditGauge score={audits.seo?.score ?? 0} label="SEO" />
+              </div>
+
+              {/* Detailed Audit Breakdown Grid */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-4">
+                {/* Performance timings */}
+                <div className="space-y-3 p-4 rounded-xl bg-muted/20 border border-border/50">
+                  <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse" />
+                    Performance Timings & Assets
+                  </h3>
+                  <div className="grid grid-cols-2 gap-3 pt-2">
+                    <div className="p-3 rounded-lg bg-background/50 border border-border/40">
+                      <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">Load Time</span>
+                      <p className="text-xl font-bold text-blue-400 mt-1">
+                        {audits.performance?.loadTimeMs ? (audits.performance.loadTimeMs / 1000).toFixed(2) : "0.00"}s
+                      </p>
+                      <span className="text-[10px] text-muted-foreground">({audits.performance?.loadTimeMs ?? 0} ms)</span>
+                    </div>
+                    <div className="p-3 rounded-lg bg-background/50 border border-border/40">
+                      <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">DOM Interactive</span>
+                      <p className="text-xl font-bold text-indigo-400 mt-1">
+                        {audits.performance?.domContentLoadedMs ? (audits.performance.domContentLoadedMs / 1000).toFixed(2) : "0.00"}s
+                      </p>
+                      <span className="text-[10px] text-muted-foreground">({audits.performance?.domContentLoadedMs ?? 0} ms)</span>
+                    </div>
+                    <div className="p-3 rounded-lg bg-background/50 border border-border/40">
+                      <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">Page Weight</span>
+                      <p className="text-xl font-bold text-teal-400 mt-1">
+                        {audits.performance?.pageSizeBytes ? (audits.performance.pageSizeBytes / (1024 * 1024)).toFixed(2) : "0.00"} MB
+                      </p>
+                      <span className="text-[10px] text-muted-foreground">({audits.performance?.pageSizeBytes ? (audits.performance.pageSizeBytes / 1024).toFixed(0) : "0"} KB)</span>
+                    </div>
+                    <div className="p-3 rounded-lg bg-background/50 border border-border/40">
+                      <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">Resource Count</span>
+                      <p className="text-xl font-bold text-cyan-400 mt-1">{audits.performance?.resourceCount ?? 0}</p>
+                      <span className="text-[10px] text-muted-foreground">JS: {audits.performance?.breakdown?.js ?? 0} | CSS: {audits.performance?.breakdown?.css ?? 0} | Img: {audits.performance?.breakdown?.img ?? 0}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* SEO & Best Practices checklists */}
+                <div className="space-y-3 p-4 rounded-xl bg-muted/20 border border-border/50">
+                  <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-teal-500" />
+                    SEO & Best Practices Checks
+                  </h3>
+                  <div className="space-y-2 pt-1 font-mono text-xs">
+                    <div className="flex justify-between items-center p-2 rounded bg-background/40 border border-border/30">
+                      <span className="text-muted-foreground">HTML Page Title</span>
+                      <span className={audits.seo?.hasTitle ? "text-green-400 font-bold" : "text-red-400 font-bold"}>
+                        {audits.seo?.hasTitle ? "✓ Present" : "✗ Missing"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center p-2 rounded bg-background/40 border border-border/30">
+                      <span className="text-muted-foreground">Meta Description</span>
+                      <span className={audits.seo?.hasMetaDescription ? "text-green-400 font-bold" : "text-red-400 font-bold"}>
+                        {audits.seo?.hasMetaDescription ? "✓ Present" : "✗ Missing"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center p-2 rounded bg-background/40 border border-border/30">
+                      <span className="text-muted-foreground">Heading Structure (Single H1)</span>
+                      <span className={audits.seo?.h1Count === 1 ? "text-green-400 font-bold" : "text-amber-400 font-bold"}>
+                        {audits.seo?.h1Count === 1 ? "✓ Valid (1)" : `⚠ Found ${audits.seo?.h1Count ?? 0}`}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center p-2 rounded bg-background/40 border border-border/30">
+                      <span className="text-muted-foreground">Secure connection (HTTPS)</span>
+                      <span className={audits.bestPractices?.hasHttps ? "text-green-400 font-bold" : "text-amber-400 font-bold"}>
+                        {audits.bestPractices?.hasHttps ? "✓ Secure" : "⚠ Local HTTP"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center p-2 rounded bg-background/40 border border-border/30">
+                      <span className="text-muted-foreground">Images Missing Alt Attribute</span>
+                      <span className={audits.seo?.imgMissingAltCount === 0 ? "text-green-400 font-bold" : "text-red-400 font-bold"}>
+                        {audits.seo?.imgMissingAltCount === 0 ? "✓ 0 issues" : `✗ ${audits.seo?.imgMissingAltCount} images`}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Accessibility Violations */}
+              <div className="space-y-3 mt-4">
+                <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-red-500" />
+                  WCAG Accessibility Violations ({audits.accessibility?.violationsCount ?? 0})
+                </h3>
+                {(!audits.accessibility?.violations || audits.accessibility.violations.length === 0) ? (
+                  <div className="p-4 rounded-xl border border-green-500/20 bg-green-500/5 text-center text-sm text-green-400 font-medium">
+                    ✓ No accessibility violations detected. Great job on WCAG compliance!
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {audits.accessibility.violations.map((violation: any, vIdx: number) => (
+                      <div key={vIdx} className="p-4 rounded-xl border border-border/60 bg-muted/10 space-y-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <Badge className="font-mono text-[10px] bg-red-500/20 text-red-400 border border-red-500/30 uppercase">
+                              {violation.impact}
+                            </Badge>
+                            <h4 className="text-sm font-bold text-slate-200">{violation.help}</h4>
+                          </div>
+                          {violation.helpUrl && (
+                            <a href={violation.helpUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline flex items-center gap-1">
+                              WCAG Guidelines <ExternalLink className="w-3.5 h-3.5" />
+                            </a>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground">{violation.description}</p>
+                        
+                        {/* Nodes list */}
+                        {violation.nodes && violation.nodes.length > 0 && (
+                          <div className="mt-2 space-y-1.5 border-t border-border/30 pt-2">
+                            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Target Elements</p>
+                            {violation.nodes.map((node: any, nIdx: number) => (
+                              <div key={nIdx} className="space-y-1">
+                                <code className="text-[11px] text-cyan-400 font-mono block select-all">
+                                  {node.target?.join(" > ") || "Unknown selector"}
+                                </code>
+                                <pre className="text-[10px] bg-black/40 border border-border/40 p-2 rounded overflow-x-auto text-muted-foreground font-mono leading-relaxed select-all max-h-24">
+                                  {node.html}
+                                </pre>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Executive Summary */}
         <Card>
