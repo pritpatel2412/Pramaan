@@ -1,0 +1,1476 @@
+# AutoViva AI — Full SaaS PRD & Builder Prompt
+
+> **Project:** AutoViva AI — AI-Powered Project Evaluation Agent  
+> **Version:** 1.0 (MVP to Production Roadmap)  
+> **Author:** Prit (23cs106) — CSPIT, Surat  
+> **Stack:** Next.js + FastAPI + AgentScope + PinchTab + Groq + PostgreSQL
+
+---
+
+## PART A: MASTER BUILDER PROMPT
+
+Use this prompt verbatim when starting development with any AI coding assistant (Cursor, Claude Code, GitHub Copilot, etc).
+
+---
+
+```
+You are a senior full-stack engineer building "AutoViva AI" — a production-grade SaaS platform 
+that acts as an AI-powered project evaluation agent for college students and hackathon judges.
+
+The platform automates browser-based evaluation of student localhost web projects, executes 
+predefined test cases, captures evidence (screenshots, logs, DOM snapshots), and generates a 
+professional evaluation report — all within 10 minutes.
+
+---
+
+### CORE CONCEPT
+
+A student runs their project locally (e.g., http://localhost:3000). They open AutoViva AI, 
+enter the project URL + credentials + test cases in JSON format. The system:
+1. Launches a Chrome browser via PinchTab API
+2. Logs into the student's app
+3. Executes each test case step-by-step using an AI agent
+4. Captures screenshots and evidence after every step
+5. Verifies actual result vs expected result
+6. Generates a professional evaluation report with a score out of 100
+
+---
+
+### TECH STACK
+
+Frontend:
+- Next.js 14 (App Router)
+- TypeScript
+- Tailwind CSS
+- shadcn/ui components
+- Framer Motion (animations)
+- React Hook Form + Zod (form validation)
+- SWR (data fetching)
+- Socket.io client (real-time agent logs)
+
+Backend:
+- FastAPI (Python 3.11+)
+- SQLAlchemy ORM
+- PostgreSQL (Supabase in production, SQLite for dev)
+- Alembic (migrations)
+- Celery + Redis (async job queue for evaluation runs)
+- Socket.io server (real-time streaming of agent logs)
+- python-jose (JWT auth)
+- passlib (password hashing)
+
+Agent Layer:
+- AgentScope (multi-agent orchestration)
+- Groq API (LLaMA 3.3 70B for planning and report generation)
+- Groq Whisper (speech-to-text for voice viva)
+- Groq TTS (text-to-speech for report narration)
+
+Browser Control:
+- PinchTab HTTP API (primary browser controller)
+- Playwright Python (deterministic fallback)
+
+Storage:
+- Local filesystem for screenshots/artifacts (S3 in production)
+- PostgreSQL for structured data
+
+Report Generation:
+- WeasyPrint (PDF)
+- Jinja2 (HTML templates)
+
+---
+
+### FULL PLATFORM ARCHITECTURE
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│                        Next.js Frontend (Port 3000)                    │
+│    Landing → Auth → Dashboard → Projects → Evaluator → Reports → Viva  │
+└────────────────────────────┬───────────────────────────────────────────┘
+                             │ REST + WebSocket
+┌────────────────────────────▼───────────────────────────────────────────┐
+│                      FastAPI Backend (Port 8000)                        │
+│  Auth → Projects → Test Suites → Evaluation Engine → Report Engine      │
+└──────┬──────────────┬─────────────────────┬────────────────────────────┘
+       │              │                     │
+┌──────▼──────┐ ┌─────▼────────┐   ┌───────▼──────────┐
+│  PostgreSQL  │ │  Celery+Redis│   │  AgentScope       │
+│  (Database)  │ │  (Job Queue) │   │  (Agent Pipeline) │
+└─────────────┘ └─────────────┘   └───────┬──────────┘
+                                           │
+                              ┌────────────▼───────────┐
+                              │  PinchTab HTTP API      │
+                              │  (Browser Controller)   │
+                              └────────────┬───────────┘
+                                           │
+                              ┌────────────▼───────────┐
+                              │  Chrome (localhost app) │
+                              └────────────────────────┘
+```
+
+---
+
+### DATABASE SCHEMA (PostgreSQL)
+
+**users**
+- id (UUID PK)
+- name (varchar)
+- email (varchar unique)
+- hashed_password (varchar)
+- plan (enum: free, pro, team)
+- created_at, updated_at
+
+**projects**
+- id (UUID PK)
+- user_id (FK → users)
+- name (varchar)
+- description (text)
+- base_url (varchar)
+- tech_stack (varchar)
+- login_url (varchar)
+- status (enum: active, archived)
+- created_at, updated_at
+
+**credentials**
+- id (UUID PK)
+- project_id (FK → projects)
+- role (varchar)  — "admin", "user", "student"
+- username (varchar)
+- password_encrypted (varchar)  — AES encrypted, never plaintext in DB
+
+**test_suites**
+- id (UUID PK)
+- project_id (FK → projects)
+- name (varchar)
+- description (text)
+- json_config (jsonb)  — full test suite JSON
+- created_at, updated_at
+
+**test_runs**
+- id (UUID PK)
+- project_id (FK)
+- suite_id (FK)
+- user_id (FK)
+- mode (enum: live_demo, pre_check, strict)
+- status (enum: pending, running, completed, failed)
+- score (integer 0–100)
+- grade (varchar)
+- total_tests (integer)
+- passed (integer)
+- failed (integer)
+- duration_seconds (integer)
+- started_at, completed_at
+
+**test_results**
+- id (UUID PK)
+- run_id (FK → test_runs)
+- test_case_id (varchar)
+- title (varchar)
+- status (enum: passed, failed, skipped, error)
+- steps_executed (jsonb)
+- expected_result (jsonb)
+- actual_result (jsonb)
+- error_message (text)
+- duration_seconds (float)
+- executed_at
+
+**artifacts**
+- id (UUID PK)
+- run_id (FK)
+- result_id (FK → test_results, nullable)
+- type (enum: screenshot, trace, console_log, dom_snapshot, video)
+- file_path (varchar)
+- step_number (integer)
+- created_at
+
+**reports**
+- id (UUID PK)
+- run_id (FK unique)
+- html_path (varchar)
+- pdf_path (varchar)
+- summary (text)
+- ai_notes (text)
+- suggestions (jsonb)
+- generated_at
+
+---
+
+### API ROUTES (FastAPI)
+
+**Auth**
+POST   /api/auth/register
+POST   /api/auth/login
+POST   /api/auth/logout
+GET    /api/auth/me
+POST   /api/auth/refresh
+
+**Projects**
+GET    /api/projects
+POST   /api/projects
+GET    /api/projects/{id}
+PUT    /api/projects/{id}
+DELETE /api/projects/{id}
+
+**Credentials**
+POST   /api/projects/{id}/credentials
+GET    /api/projects/{id}/credentials
+DELETE /api/projects/{id}/credentials/{cred_id}
+
+**Test Suites**
+GET    /api/projects/{id}/test-suites
+POST   /api/projects/{id}/test-suites
+GET    /api/test-suites/{id}
+PUT    /api/test-suites/{id}
+DELETE /api/test-suites/{id}
+POST   /api/test-suites/generate  — AI-generated test cases from project description
+
+**Evaluation Runs**
+POST   /api/runs/start             — triggers Celery job
+GET    /api/runs/{id}/status
+GET    /api/runs/{id}/results
+GET    /api/runs
+WS     /ws/runs/{id}               — Socket.io real-time log stream
+
+**Reports**
+GET    /api/runs/{id}/report
+GET    /api/runs/{id}/report/pdf   — PDF download
+POST   /api/runs/{id}/ask          — Q&A with report agent
+POST   /api/runs/{id}/narrate      — Generate audio narration (Groq TTS)
+
+**Analytics**
+GET    /api/analytics/overview
+GET    /api/analytics/project/{id}
+
+---
+
+### AGENT PIPELINE (AgentScope Multi-Agent)
+
+Build 7 agents that run in sequence per evaluation:
+
+**Agent 1: ProjectUnderstandingAgent**
+Input: project metadata (name, URL, description, tech stack)
+Output: { main_modules, risk_areas, suggested_test_coverage }
+LLM: Groq LLaMA 3.3 70B
+
+**Agent 2: TestPlannerAgent**
+Input: raw test cases (JSON) + project understanding
+Output: browser_plan[] for each test case
+Each step has: { action, target, value, wait_for, expected_change }
+LLM: Groq LLaMA 3.3 70B
+
+**Agent 3: BrowserExecutorAgent**
+Uses: PinchTab HTTP API
+Actions: navigate, click, fill, wait, screenshot, extract_text, dom_snapshot
+After each step: capture screenshot, extract page text, record URL
+Does NOT use LLM — pure deterministic browser control
+
+**Agent 4: AssertionAgent**
+Input: expected_result + actual page state (text, URL, DOM)
+Output: { passed: bool, evidence: {...}, confidence: float }
+Rules: NEVER mark passed without evidence. Evidence = screenshot + text match or URL match.
+LLM: Groq LLaMA 3.3 70B (for semantic matching only)
+
+**Agent 5: RecoveryAgent**
+Triggered when: step fails due to changed UI (button text, route, field label)
+Strategy: try up to 2 alternative selectors, then mark as failed with details
+LLM: Groq LLaMA 3.3 70B
+
+**Agent 6: ReportAgent**
+Input: all test results + evidence
+Output: { summary, score, grade, suggestions, ai_notes }
+Scoring: use the scoring rubric defined in PRD Section 11
+LLM: Groq LLaMA 3.3 70B
+
+**Agent 7: VivaAgent**
+Input: full report + Q&A question from examiner
+Output: spoken/written answer backed by evidence
+Supports voice via Groq Whisper (STT) + Groq TTS
+LLM: Groq LLaMA 3.3 70B
+
+---
+
+### TEST CASE JSON SCHEMA
+
+Every test case must follow this exact schema:
+
+{
+  "project": {
+    "name": "string",
+    "base_url": "http://localhost:XXXX",
+    "description": "string",
+    "tech_stack": "string"
+  },
+  "auth": {
+    "login_url": "/login",
+    "credentials": [
+      { "role": "admin", "username": "string", "password": "string" }
+    ]
+  },
+  "test_cases": [
+    {
+      "id": "TC_001",
+      "title": "string",
+      "priority": "high|medium|low",
+      "role": "admin|user",
+      "steps": [
+        { "action": "navigate|click|fill|wait|assert_text|assert_url|screenshot", "target": "string", "value": "string" }
+      ],
+      "expected": {
+        "url_contains": "string (optional)",
+        "page_contains": "string (optional)",
+        "element_visible": "string (optional)"
+      }
+    }
+  ],
+  "evaluation": {
+    "capture_screenshots": true,
+    "capture_console_errors": true,
+    "max_time_per_test_seconds": 60,
+    "retry_failed_steps": 1
+  }
+}
+
+---
+
+### EVALUATION SCORING RUBRIC
+
+Total: 100 points
+
+| Category                    | Points |
+|-----------------------------|--------|
+| Login/Authentication        | 10     |
+| Core feature completion     | 30     |
+| CRUD functionality          | 20     |
+| UI navigation & flow        | 10     |
+| Error handling/validation   | 10     |
+| Database persistence proof  | 10     |
+| Code/demo reliability       | 5      |
+| Overall UI polish           | 5      |
+
+Grade mapping:
+90–100 = A+ (Outstanding)
+80–89  = A  (Excellent)
+70–79  = B  (Good)
+60–69  = C  (Satisfactory)
+Below 60 = F (Needs Improvement)
+
+---
+
+### SECURITY RULES (NON-NEGOTIABLE)
+
+1. PinchTab server MUST bind to 127.0.0.1 only
+2. All credentials stored AES-256 encrypted in DB
+3. Passwords NEVER appear in reports or logs — always masked as ****
+4. Browser sessions isolated per project run
+5. URL allowlist: localhost, 127.0.0.1, *.local, college internal IPs only
+6. JWT tokens expire in 24 hours
+7. Rate limit: max 5 concurrent evaluation runs per user
+8. Screenshots stored with hashed filenames
+9. Browser profile deleted after run completes
+10. API endpoints protected with auth middleware
+
+---
+
+Build the complete platform following all specifications above. 
+Start with the backend FastAPI server, then the frontend, then the agent pipeline.
+Use the page specifications in the PRD below for each UI page.
+```
+
+---
+
+## PART B: COMPLETE PRD
+
+---
+
+## 1. Product Overview
+
+**Product Name:** AutoViva AI  
+**Tagline:** "10-minute project viva? Let the AI examiner test the full project."  
+**Type:** SaaS Web Platform (locally installed browser agent)  
+**Target Users:** Engineering students, external examiners, hackathon judges, faculty  
+**Core Value:** Automated, evidence-based, AI-powered evaluation of student software projects running on localhost  
+
+---
+
+## 2. Problem Statement
+
+In college external project evaluations, students get 5–10 minutes to demonstrate full software systems. External examiners check 1–2 features due to time constraints. This causes three critical problems:
+
+- **Problem 1:** Good projects are under-evaluated. Complex features never get shown.
+- **Problem 2:** Fake or incomplete projects can pass if the login screen looks good.
+- **Problem 3:** Students cannot prove full functionality without live demos that crash under pressure.
+
+**AutoViva AI solves this by acting as an AI examiner that opens the project, tests every feature, captures proof, and delivers a scored report — all automatically.**
+
+---
+
+## 3. User Personas
+
+### Persona 1: The Student (Primary)
+- BE/BTech final year student
+- Has a web project running on localhost
+- Wants to demonstrate all features fairly
+- Needs a polished evaluation report as evidence
+
+### Persona 2: The External Examiner (Secondary)
+- Faculty from another college
+- Has 5–10 minutes per student
+- Cannot deeply verify every feature manually
+- Trusts an automated, evidence-backed report
+
+### Persona 3: The Hackathon Judge (Future)
+- Evaluates 20–50 projects in one day
+- Needs fast, consistent, objective evaluation
+- Wants feature proof without sitting through each demo
+
+### Persona 4: The Faculty/HOD (Future)
+- Manages all student project evaluations
+- Wants ranked output with scores and evidence
+- Needs to export and submit reports to university
+
+---
+
+## 4. User Flows
+
+### Student Flow (Primary)
+1. Sign up / Log in to AutoViva AI
+2. Create a new Project (enter name, URL, description, tech stack)
+3. Add Credentials (email, password, role)
+4. Open Test Suite Builder — import JSON or build manually
+5. Choose Evaluation Mode (Pre-check / Live Demo / Strict)
+6. Click "Run Evaluation"
+7. Watch live browser execution on screen
+8. Review the final report
+9. Download PDF report
+10. Show report to examiner during viva
+
+### Examiner Flow
+1. Student opens AutoViva AI during viva
+2. Examiner asks student to run full evaluation
+3. Examiner watches browser agent execute tests in real time
+4. Examiner reads final report + score
+5. Examiner asks voice/text questions to Viva Agent
+6. Examiner accepts the evaluation report as proof
+
+---
+
+## 5. Evaluation Modes
+
+| Mode | Who Uses It | Browser | Voice | Intervention |
+|------|-------------|---------|-------|--------------|
+| Pre-check | Student before viva | Headless | No | Recovery allowed |
+| Live Demo | Viva with examiner | Headed (visible) | Yes | None |
+| Strict | Faculty/Hackathon | Headed | No | None |
+| Quick Smoke | Fast sanity check | Headless | No | Recovery allowed |
+
+---
+
+## 6. Complete Page Specifications
+
+---
+
+### PAGE 1: Landing Page (`/`)
+
+**Purpose:** Marketing and conversion page. Convince students/faculty to sign up.
+
+**Layout:** Full-page sections with scroll animations
+
+**Sections:**
+
+**Section 1 — Hero**
+- Headline: "Let the AI Examiner Test Your Project — Before Your Examiner Does"
+- Subheadline: "AutoViva AI automatically opens your localhost project, executes test cases, captures screenshots, and generates a professional evaluation report in under 10 minutes."
+- Primary CTA button: "Start Free Evaluation" → /register
+- Secondary CTA: "Watch Demo" → plays embedded 2-min demo video
+- Visual: Animated browser window showing agent clicking through a student project
+
+**Section 2 — Problem Statement**
+- Three cards side by side:
+  - Card 1: "Only 10 Minutes" — icon of a clock — "Examiners can verify maybe 2 features."
+  - Card 2: "No Proof" — icon of a question mark — "Students say features work. There's no evidence."
+  - Card 3: "Unfair Evaluation" — icon of a broken scale — "Complex projects get the same marks as simple ones."
+- Below: "AutoViva AI changes all three."
+
+**Section 3 — How It Works**
+- 5-step horizontal process with icons:
+  1. Enter your localhost URL
+  2. Add test cases (JSON or manual)
+  3. Run the AI agent
+  4. Agent tests every feature
+  5. Get a scored evaluation report
+- Visual: Screenshot of the Live Evaluation page
+
+**Section 4 — Feature Highlights**
+- 6 feature cards in 2x3 grid:
+  - Browser Agent (PinchTab-powered Chrome automation)
+  - Screenshot Evidence (every step captured)
+  - AI Report Generation (scored with explanations)
+  - Voice Viva Support (ask the AI examiner questions)
+  - JSON Test Cases (import or build visually)
+  - PDF Export (ready to submit)
+
+**Section 5 — Scoring System**
+- Visual breakdown of the 100-point scoring rubric as a donut chart or bar chart
+- Show the 8 categories and their weights
+
+**Section 6 — Testimonials / Use Cases**
+- Three cards:
+  - "Used in viva for Matrimony project — scored 86/100, examiner was impressed"
+  - "Found 2 validation bugs before viva — fixed them in time"
+  - "Hackathon judge evaluated 12 teams in 2 hours using AutoViva"
+
+**Section 7 — Pricing**
+- Three tiers:
+  - Free: 3 evaluations/month, 5 test cases per suite, PDF export
+  - Pro (₹299/month): Unlimited evaluations, 50 test cases, voice viva, AI test generation
+  - Team (₹999/month): 5 users, faculty dashboard, bulk evaluation, API access
+- Each with CTA button
+
+**Section 8 — Footer**
+- Logo, tagline
+- Links: Features, Pricing, Docs, GitHub, Contact
+- Social links
+
+---
+
+### PAGE 2: Register Page (`/register`)
+
+**Purpose:** Create account
+
+**Layout:** Split screen — left side visual/branding, right side form
+
+**Left Panel:**
+- AutoViva AI logo + tagline
+- Animated illustration of browser agent running tests
+- Quote: "Your project deserves a fair evaluation."
+
+**Right Panel (Form):**
+- Title: "Create your account"
+- Fields:
+  - Full Name (text input)
+  - Email (email input)
+  - Password (password input with show/hide toggle)
+  - Confirm Password
+  - College Name (text input)
+  - Role toggle: Student / Faculty / Judge
+- Submit button: "Create Account"
+- Divider: "or continue with"
+- Google OAuth button
+- Link: "Already have an account? Sign in"
+- Terms of Service checkbox
+
+**Validation (Zod):**
+- Name: min 2 chars
+- Email: valid email format
+- Password: min 8 chars, 1 uppercase, 1 number
+- Confirm Password: must match
+
+**On Success:**
+- Toast: "Account created! Check your email for verification."
+- Redirect to /dashboard
+
+---
+
+### PAGE 3: Login Page (`/login`)
+
+**Purpose:** Authenticate existing users
+
+**Layout:** Same split layout as register
+
+**Right Panel (Form):**
+- Title: "Welcome back"
+- Fields:
+  - Email
+  - Password (with show/hide)
+- "Forgot password?" link → /forgot-password
+- Submit button: "Sign In"
+- Google OAuth button
+- Link: "Don't have an account? Sign up"
+
+**On Success:**
+- Redirect to /dashboard
+
+**Error States:**
+- Invalid credentials: inline error below password field
+- Account not verified: show resend verification link
+
+---
+
+### PAGE 4: Dashboard (`/dashboard`)
+
+**Purpose:** Overview of all projects, recent runs, quick stats
+
+**Layout:** Sidebar navigation (persistent) + main content area
+
+**Sidebar (fixed left, 240px):**
+- AutoViva AI logo at top
+- Navigation items:
+  - Dashboard (home icon)
+  - Projects (folder icon)
+  - Evaluations (play icon)
+  - Reports (document icon)
+  - Viva Mode (mic icon)
+  - Settings (gear icon)
+- User avatar + name at bottom with logout option
+
+**Main Content:**
+
+Sub-section 1 — Welcome Banner
+- "Good morning, Prit 👋" with current date
+- Quick action button: "New Evaluation" → /projects/new
+
+Sub-section 2 — Stats Row (4 cards)
+- Total Projects (count)
+- Total Evaluations Run (count)
+- Average Score (number with color: green if ≥75, yellow if 50–74, red if <50)
+- Pass Rate % (tests passed / total tests)
+
+Sub-section 3 — Recent Evaluations Table
+- Columns: Project Name, Mode, Date, Tests Passed, Score, Grade, Actions
+- Each row has: "View Report" button, "Re-run" button
+- Sorted by most recent first
+- Empty state: "No evaluations yet — Start your first evaluation"
+
+Sub-section 4 — Projects Grid (3 columns)
+- Each card shows:
+  - Project name + tech stack badge
+  - Base URL
+  - Last evaluation: date + score + grade
+  - Number of test suites
+  - Buttons: "View", "Run Evaluation", "Edit"
+- "Add New Project" card at the end (dashed border)
+
+Sub-section 5 — Quick Tips Sidebar (right panel, 280px)
+- "Getting Started" checklist:
+  - ✅ Create account
+  - ⬜ Add your first project
+  - ⬜ Create a test suite
+  - ⬜ Run your first evaluation
+- Tips for writing good test cases
+- Link to documentation
+
+---
+
+### PAGE 5: Projects List (`/projects`)
+
+**Purpose:** View, search, and manage all projects
+
+**Layout:** Full-width content with top action bar
+
+**Top Bar:**
+- Title: "My Projects"
+- Search input: "Search projects..."
+- Filter by: Tech stack (dropdown)
+- Sort by: Last updated, Name, Score
+- Button: "New Project" (primary)
+
+**Content:**
+- Projects displayed as cards in responsive grid (3 cols desktop, 2 tablet, 1 mobile)
+
+**Project Card:**
+- Top: Project name (bold) + status badge (Active/Archived)
+- Tech stack badge (e.g., "React + Node.js")
+- Base URL (monospace text, truncated)
+- Description (2 lines, truncated)
+- Stats row: [X Test Suites] [X Runs] [Avg Score: XX]
+- Last evaluated: relative time (e.g., "2 days ago")
+- Divider
+- Action row: "View" | "Run" | "Edit" | "⋮" (more: Archive, Delete)
+
+**Empty State (when no projects):**
+- Large icon (folder)
+- "No projects yet"
+- "Create your first project to start evaluating"
+- CTA button: "Create Project"
+
+---
+
+### PAGE 6: Create/Edit Project (`/projects/new` and `/projects/{id}/edit`)
+
+**Purpose:** Create a new project or edit an existing one
+
+**Layout:** Single-column form with sections, progress indicator at top
+
+**Progress Steps:**
+1. Project Details
+2. Login Configuration
+3. Credentials
+4. Test Suite (optional at creation)
+
+**Step 1 — Project Details:**
+- Project Name (required) — text input
+- Description — textarea (min 20 chars)
+- Base URL — text input (e.g., http://localhost:3000)
+  - Validator: must start with http://localhost or http://127.0.0.1
+- Tech Stack — multi-select tags (React, Node.js, Django, Flask, Laravel, Next.js, Vue, Angular, etc.)
+- Project Type — select (Web App, API + Frontend, Mobile Web, Admin Panel)
+
+**Step 2 — Login Configuration:**
+- Login URL — text input (e.g., /login)
+- Login page type — select:
+  - Email + Password form
+  - Username + Password form
+  - Custom (user maps fields manually)
+- Post-login redirect — text input (e.g., /dashboard)
+
+**Step 3 — Credentials:**
+- Add multiple credential sets (for different roles)
+- Each credential row:
+  - Role label (Admin, User, Student — text input)
+  - Username/Email (text input)
+  - Password (password input, shown/hidden toggle)
+  - "Remove" button
+- "Add Another Credential" button
+
+**Step 4 — Test Suite (Optional):**
+- Skip or proceed to test suite builder
+- Option 1: "I'll add test cases later" → create project without suite
+- Option 2: "Import JSON" → shows JSON upload/paste area
+- Option 3: "Build manually" → inline test case builder (basic version)
+
+**Action Buttons:**
+- "Save & Continue" (progresses to next step)
+- "Save as Draft" (saves without completing)
+- "Cancel" → /projects
+
+---
+
+### PAGE 7: Test Suite Builder (`/projects/{id}/test-suites/new` and `/{id}/edit`)
+
+**Purpose:** Create and manage test cases visually or via JSON
+
+**Layout:** Two-panel layout — left panel (test case list), right panel (editor)
+
+**Top Bar:**
+- Suite name input field (editable inline)
+- Mode toggle: "Visual Editor" | "JSON Editor"
+- Button: "Generate with AI" (opens AI generation modal)
+- Button: "Import JSON"
+- Button: "Save Suite"
+- Button: "Run Evaluation" (primary, launches evaluation with this suite)
+
+**Left Panel — Test Case List (300px):**
+- List of all test cases with:
+  - Case ID (TC_001, TC_002...)
+  - Title
+  - Priority badge (High = red, Medium = yellow, Low = green)
+  - Status icon (not run, passed, failed)
+  - Drag handle for reordering
+- "Add Test Case" button at bottom
+- Test case categories as collapsible groups:
+  - Authentication Tests
+  - CRUD Tests
+  - Navigation Tests
+  - Form Validation Tests
+  - Role-based Tests
+  - Smoke Tests
+
+**Right Panel — Visual Editor:**
+
+When a test case is selected, show:
+
+Section 1 — Metadata:
+- Test Case ID (auto-generated, editable)
+- Title (text input)
+- Priority (High/Medium/Low toggle)
+- Role (select from project credentials)
+- Description (optional textarea)
+
+Section 2 — Steps Builder:
+- Drag-and-drop step list
+- Each step has:
+  - Action dropdown: navigate | click | fill | wait | screenshot | assert_text | assert_url | assert_element | scroll
+  - Target field: text input (button text, field label, CSS selector, URL path)
+  - Value field: appears for fill, navigate, wait
+  - "Add Step" button
+  - "Duplicate Step" | "Delete Step" icon buttons
+- Preview of current steps as ordered list
+
+Section 3 — Expected Result:
+- URL Contains: text input (optional)
+- Page Contains: text input (optional)
+- Element Visible: text input (optional)
+
+**Right Panel — JSON Editor:**
+- Monaco Editor (VS Code-style) with full JSON
+- JSON schema validation (error underlines)
+- Format button (auto-prettify)
+- Copy to clipboard button
+
+**AI Generation Modal (trigger: "Generate with AI" button):**
+- Title: "Generate Test Cases with AI"
+- Input: "Describe your project features..."
+- Textarea placeholder: "e.g., This is a college attendance management system with admin login, student records, attendance marking, and reports export."
+- Checkbox options:
+  - Include auth tests
+  - Include CRUD tests
+  - Include navigation tests
+  - Include form validation tests
+  - Include role-based tests
+- Button: "Generate Test Cases"
+- Shows spinner while Groq generates
+- Preview of generated cases before inserting
+
+---
+
+### PAGE 8: Evaluation Setup (`/runs/new?project={id}&suite={id}`)
+
+**Purpose:** Configure and launch an evaluation run
+
+**Layout:** Centered single-column form
+
+**Top:** Breadcrumb: Dashboard > Projects > [Project Name] > New Evaluation
+
+**Section 1 — Summary:**
+- Project: [Name] at [URL]
+- Test Suite: [Suite Name] — X test cases
+- Credentials: [Role 1], [Role 2]
+
+**Section 2 — Evaluation Mode:**
+- Three large radio card options:
+  - **Pre-check Mode** — "Run before your viva to find bugs. Headless, fast, with recovery."
+  - **Live Demo Mode** — "Show examiner the agent testing your project live. Browser visible. Voice narration available."
+  - **Strict Mode** — "Full evaluation. No recovery. Full trace. Used by faculty/judges."
+
+**Section 3 — Options:**
+- ☑ Capture screenshots after every step
+- ☑ Capture browser console errors
+- ☑ Record browser trace (Playwright)
+- ☑ Enable voice narration (Live Demo mode only)
+- ☐ Stop on first failure
+- Max time per test: [60] seconds (number input)
+- Retry failed steps: [1] time (number input)
+
+**Section 4 — Browser Settings:**
+- Browser mode toggle: Headed (visible) | Headless
+- Browser profile: New profile | Use saved profile
+- Chrome path: (auto-detected) [Override path]
+
+**Action:**
+- Button: "Start Evaluation" (large, primary)
+- Button: "Run Dry-Run Preview" (preview steps without executing)
+
+**Dry-Run Modal:**
+- Shows all test cases with their steps listed
+- No browser launched
+- Student can review before running
+- "Looks good — Start Real Evaluation" | "Back to edit"
+
+---
+
+### PAGE 9: Live Evaluation Page (`/runs/{id}/live`)
+
+**Purpose:** Real-time view of the agent executing test cases
+
+**Layout:** Full screen, 3-column layout
+
+**Left Column (300px) — Test Case Progress:**
+- Title: "Evaluation in Progress"
+- Progress bar: "X of Y test cases complete"
+- List of all test cases with live status icons:
+  - ⏳ Pending (grey)
+  - ▶️ Running (animated blue spinner)
+  - ✅ Passed (green checkmark)
+  - ❌ Failed (red X)
+  - ⚠️ Skipped (yellow)
+- Currently running case highlighted with pulsing border
+- Time elapsed counter
+
+**Center Column (flex-1) — Browser View + Activity:**
+
+Top Half — Screenshot Feed:
+- Large screenshot display area (16:9 ratio)
+- Shows latest screenshot from the agent
+- Auto-updates every 2 seconds via WebSocket
+- "Live" indicator pulsing badge
+- Step label below screenshot: "Step 3: Clicking 'Add Student' button"
+
+Bottom Half — Agent Log Stream:
+- Terminal-style dark box
+- Streaming logs via Socket.io:
+  ```
+  [10:32:01] 🚀 Starting evaluation for "Student Attendance System"
+  [10:32:02] 🔐 Logging in as admin@test.com
+  [10:32:04] ✅ Login successful — redirected to /dashboard
+  [10:32:05] 📋 Starting TC_001: Admin login test
+  [10:32:06] ➡️  Navigating to /students
+  [10:32:07] 🖱️  Clicking "Add Student"
+  [10:32:08] 📝 Filling "Name" with "Rahul Patel"
+  [10:32:09] 📝 Filling "Email" with "rahul@test.com"
+  [10:32:10] 🖱️  Clicking "Submit"
+  [10:32:11] 🔍 Verifying: page contains "Rahul Patel"
+  [10:32:12] ✅ TC_001 PASSED in 7.2s
+  ```
+- Auto-scroll to bottom
+- "Pause log scroll" toggle
+
+**Right Column (280px) — Evidence Panel:**
+- Title: "Evidence Captured"
+- Screenshot thumbnails grid (2 per row)
+  - Labeled with step number + action
+  - Click to open full-size in modal
+- Console errors count (if any)
+- DOM snapshots available
+
+**Bottom Bar (full width):**
+- Voice narration toggle (speaker icon)
+- "Pause Agent" button
+- "Stop Evaluation" button (with confirm dialog)
+- Current test: [TC_002 — Add Student Record]
+- ETA: ~3 minutes remaining
+
+**If Voice Narration ON:**
+- Agent speaks each step aloud as it executes
+- Uses Groq TTS
+- Examiner can hear: "Now testing the Add Student feature. The agent is filling the student registration form with sample data."
+
+---
+
+### PAGE 10: Report Page (`/runs/{id}/report`)
+
+**Purpose:** Full evaluation report with score, evidence, and AI notes
+
+**Layout:** Single column, print-ready, with sticky header
+
+**Sticky Header:**
+- AutoViva AI logo (left)
+- Project name + score badge (center)
+- Buttons (right): "Download PDF" | "Share Report" | "Ask Viva Agent"
+
+**Section 1 — Report Header:**
+- Project Name (large heading)
+- Evaluation Date + Time
+- Mode used (Pre-check / Live Demo / Strict)
+- Duration (e.g., "Completed in 8 min 32 sec")
+- Evaluated by: AutoViva AI v1.0
+
+**Section 2 — Score Card:**
+- Large circular score display: "84 / 100"
+- Grade badge: "A — Excellent"
+- Score breakdown horizontal bar chart:
+  - Each category (8 total) shown with score/max
+  - Color: green (full), yellow (partial), red (failed)
+- Summary sentence: "8 of 10 test cases passed. Authentication and CRUD features verified."
+
+**Section 3 — Executive Summary:**
+- AI-generated paragraph summarizing the evaluation
+- Key findings (3–5 bullet points)
+- Bugs found (if any) listed clearly
+
+**Section 4 — Test Case Results Table:**
+- Columns: ID | Feature | Priority | Role | Status | Duration | Evidence
+- Each row expandable to show:
+  - Steps executed (numbered list)
+  - Expected vs Actual result
+  - Screenshots (thumbnail gallery)
+  - Error message (if failed)
+  - Console errors (if any)
+
+**Section 5 — Evidence Gallery:**
+- Grid of all screenshots
+- Each screenshot labeled: [TC_001 — Step 3 — Login Success]
+- Click to open lightbox
+
+**Section 6 — Bugs & Issues Found:**
+- Table: Issue | Test Case | Severity | Description
+- Color coded: Critical (red), Major (orange), Minor (yellow)
+
+**Section 7 — Console Errors Log:**
+- Collapsible section
+- Errors in monospace font, color-coded by type
+
+**Section 8 — AI Examiner Notes:**
+- "AutoViva AI Observations" section
+- Feature-level notes from ReportAgent
+- Suggestions for improvement (3–5 items)
+
+**Section 9 — Feature Coverage Map:**
+- Visual grid of all features mentioned in project description
+- Green = Tested & Passed
+- Red = Tested & Failed
+- Grey = Not tested
+
+**Section 10 — Recommendations:**
+- "To improve your project score:"
+- Numbered list of actionable recommendations
+
+**Footer of Report:**
+- "Generated by AutoViva AI — Evidence-based project evaluation"
+- Run ID (for verification)
+- Timestamp
+
+---
+
+### PAGE 11: Viva Mode (`/runs/{id}/viva`)
+
+**Purpose:** Interactive Q&A with the AI Viva Agent using voice or text
+
+**Layout:** Centered conversational interface
+
+**Top Section:**
+- "Viva Mode" heading
+- Project name + Score badge
+- "Powered by Groq LLaMA + Whisper"
+
+**Chat Interface:**
+- Conversation history (scrollable)
+- Each message shows:
+  - Role: "Examiner" or "AutoViva AI"
+  - Message text
+  - Evidence reference (screenshot thumbnail if relevant)
+  - Timestamp
+
+**Example Conversation:**
+```
+Examiner: Did the chat feature actually work?
+AutoViva AI: Yes. The agent logged in as User A (student@test.com), sent an interest
+  request to User B, accepted it from User B's account, opened private chat,
+  typed "Hello, I'm interested", and verified the message appeared in the chat
+  window. [See Screenshot TC_006_Step_4]
+
+Examiner: What was the admin's role in the project?
+AutoViva AI: The admin could manage user accounts, approve or reject user
+  registrations, view all submitted interest requests, and export reports.
+  Tests TC_007 through TC_009 verified admin functionality. All three passed.
+```
+
+**Input Area:**
+- Text input: "Ask the AI examiner anything..."
+- Send button (text)
+- Microphone button (voice input via Groq Whisper)
+  - Shows recording indicator when active
+  - Auto-transcribes and sends
+
+**Suggested Questions (chips):**
+- "Which test cases failed?"
+- "Prove that login works"
+- "What database features were tested?"
+- "Explain the role-based access control"
+- "What bugs were found?"
+
+**Right Panel (280px) — Quick Evidence:**
+- Evidence thumbnails relevant to current conversation
+- Click to expand
+
+**Voice Output:**
+- Toggle: "Read responses aloud" (Groq TTS)
+- When active: audio plays for each AI response
+
+---
+
+### PAGE 12: Analytics Page (`/analytics`)
+
+**Purpose:** Overall statistics across all projects and evaluations
+
+**Layout:** Dashboard with charts and tables
+
+**Top Stats Row (4 cards):**
+- Total Evaluations: count
+- Average Score: number
+- Total Test Cases Run: count
+- Pass Rate: percentage
+
+**Chart 1 — Score Trend:**
+- Line chart: evaluations over time with score on Y axis
+- Filterable: last 7 days / 30 days / 90 days / all time
+
+**Chart 2 — Score Distribution:**
+- Bar chart: number of evaluations per grade (A+, A, B, C, F)
+
+**Chart 3 — Most Common Failures:**
+- Horizontal bar chart: which test categories fail most
+- Helps students know what to improve
+
+**Chart 4 — Projects Comparison:**
+- Table: Project Name | Best Score | Latest Score | Trend | Evaluations Run
+
+**Chart 5 — Feature Coverage:**
+- Radar chart showing coverage across 8 evaluation categories
+
+---
+
+### PAGE 13: Settings Page (`/settings`)
+
+**Purpose:** Account settings, preferences, integrations
+
+**Tabs:**
+
+**Tab 1 — Profile:**
+- Update name, email, college
+- Change password
+- Profile photo upload
+- Role (Student / Faculty / Judge)
+
+**Tab 2 — Notifications:**
+- Email: Evaluation completed
+- Email: Failed tests alert
+- Email: Weekly summary
+
+**Tab 3 — API Keys:**
+- User's Groq API key (required for AI features)
+- Instructions: "Get your free Groq API key at console.groq.com"
+- Input field + "Save key" button + "Test connection" button
+- PinchTab configuration (auto-detected, or manual path override)
+
+**Tab 4 — Billing:**
+- Current plan (Free / Pro / Team)
+- Usage this month: X/3 evaluations
+- Upgrade button
+- Payment history table
+
+**Tab 5 — Danger Zone:**
+- "Delete all projects" (with confirmation)
+- "Delete account" (with email confirmation)
+
+---
+
+### PAGE 14: Faculty Dashboard (`/faculty`) *(Team Plan Only)*
+
+**Purpose:** Faculty can manage and evaluate multiple student projects
+
+**Layout:** Dashboard with student list and bulk actions
+
+**Top Bar:**
+- "Faculty Dashboard" heading
+- "Add Students" button
+- "Export All Reports" button
+- Class/batch selector dropdown
+
+**Student List Table:**
+- Columns: Student Name | Project Name | Score | Grade | Tests Passed | Status | Actions
+- Actions: "View Report" | "Run Evaluation" | "Add Notes"
+- Bulk select + "Run Selected" action
+
+**Ranking Panel:**
+- Top 5 projects highlighted
+- Bottom 5 flagged for review
+
+**Export Options:**
+- Export all scores to CSV
+- Download all PDF reports (zip)
+- Print summary sheet
+
+---
+
+## 7. Global UI Components
+
+### Navbar (authenticated)
+- Logo (left)
+- Nav links: Dashboard, Projects, Evaluations, Reports
+- Right: notifications bell, avatar dropdown (Profile, Settings, Logout)
+
+### Sidebar (authenticated pages)
+- Fixed left, collapsible
+- Items with icons and labels
+- Active item highlighted
+- Collapse button at bottom
+
+### Toast Notifications
+- Success (green): "Evaluation started successfully"
+- Error (red): "Browser agent failed to connect"
+- Warning (yellow): "PinchTab server not detected on port 3000"
+- Info (blue): "Report ready — click to view"
+
+### Loading States
+- Skeleton loaders for tables and cards
+- Full-page spinner for evaluation initialization
+- Streaming indicator for live logs
+
+### Empty States
+- Each list page has an empty state with:
+  - Relevant illustration
+  - Clear message
+  - Primary CTA button
+
+### Confirmation Dialogs
+- For: Delete project, Stop evaluation, Delete test suite
+- Title + explanation + "Confirm" + "Cancel"
+
+### Error Pages
+- 404: "This page doesn't exist" with link back to Dashboard
+- 500: "Something went wrong" with retry button
+- 403: "You don't have access to this"
+
+---
+
+## 8. Real-time WebSocket Events
+
+```
+Client connects to: ws://localhost:8000/ws/runs/{run_id}
+
+Events from server → client:
+  run:started         { run_id, total_tests, mode }
+  agent:log           { timestamp, level, message, test_case_id }
+  step:started        { test_case_id, step_number, action, target }
+  step:completed      { test_case_id, step_number, status, screenshot_url }
+  test:passed         { test_case_id, title, duration_seconds }
+  test:failed         { test_case_id, title, error, screenshot_url }
+  run:completed       { run_id, score, grade, passed, failed, report_url }
+  run:error           { error_message }
+```
+
+---
+
+## 9. PDF Report Layout
+
+**Page 1 — Cover Page:**
+- AutoViva AI logo (centered top)
+- "PROJECT EVALUATION REPORT" (heading)
+- Project Name (large)
+- Student name (if provided)
+- Evaluation Date
+- Score: XX/100 (large, colored)
+- Grade: A/B/C (bold)
+- Confidential badge
+
+**Page 2 — Executive Summary:**
+- Overview paragraph
+- Score breakdown table
+- Key findings list
+
+**Page 3–N — Detailed Results:**
+- One section per test case
+- Steps table
+- Expected vs Actual
+- Screenshot (inline, full width)
+
+**Last Page — AI Notes:**
+- AI observations
+- Recommendations
+- Report footer with run ID
+
+---
+
+## 10. PinchTab Integration Reference
+
+PinchTab exposes a local HTTP API. Use these endpoints in BrowserExecutorAgent:
+
+```python
+# Start a browser session
+POST http://127.0.0.1:9000/api/sessions
+{ "profile": "autoviva-run-{run_id}", "headless": false }
+Response: { "session_id": "abc123" }
+
+# Navigate
+POST /api/sessions/{session_id}/navigate
+{ "url": "http://localhost:3000/login" }
+
+# Take snapshot (structured content)
+GET /api/sessions/{session_id}/snapshot
+Response: { "text": "...", "interactive_elements": [...] }
+
+# Click element
+POST /api/sessions/{session_id}/click
+{ "ref": "element_ref_from_snapshot" }
+
+# Fill input
+POST /api/sessions/{session_id}/fill
+{ "ref": "element_ref", "value": "admin@test.com" }
+
+# Screenshot
+GET /api/sessions/{session_id}/screenshot
+Response: { "image_base64": "..." }
+
+# Close session
+DELETE /api/sessions/{session_id}
+```
+
+---
+
+## 11. Anti-Hallucination Rules (Agent Constraint Layer)
+
+A test case is ONLY marked as PASSED if at least ONE of the following is true:
+
+1. `expected.url_contains` matches current URL
+2. `expected.page_contains` text found in extracted page text
+3. `expected.element_visible` reference found in DOM snapshot
+4. Success message matching expected string is visible
+
+A test case is marked FAILED if:
+- Browser throws uncaught error
+- Expected condition not met within timeout
+- Recovery agent exhausts retry limit
+- Network request returns 4xx/5xx status
+
+Every PASSED result in the report must link to:
+- At least one screenshot
+- The page text excerpt showing expected content
+- The URL at time of assertion
+
+---
+
+## 12. MVP Build Order (Recommended Phases)
+
+### Phase 1 — Core Backend (Week 1–2)
+- FastAPI server setup
+- Auth system (JWT)
+- Project CRUD API
+- Test suite CRUD API
+- PostgreSQL schema + Alembic migrations
+
+### Phase 2 — Browser Agent (Week 3)
+- PinchTab HTTP client integration
+- BrowserExecutorAgent (navigate, click, fill, screenshot)
+- Basic test runner (sequential step execution)
+- Screenshot storage
+
+### Phase 3 — Frontend Core (Week 4)
+- Next.js app setup + Tailwind + shadcn/ui
+- Auth pages (login, register)
+- Dashboard page
+- Projects CRUD pages
+- Test suite builder (JSON editor only, MVP)
+
+### Phase 4 — Evaluation Pipeline (Week 5)
+- Celery + Redis job queue
+- Full agent pipeline (all 7 agents)
+- Groq API integration (TestPlanner, AssertionAgent, ReportAgent)
+- WebSocket log streaming
+
+### Phase 5 — Live UI + Reports (Week 6)
+- Live Evaluation page (real-time logs + screenshots)
+- Report page (full layout)
+- PDF generation (WeasyPrint)
+
+### Phase 6 — Voice Viva (Week 7)
+- Viva Mode page
+- Groq Whisper (STT) integration
+- Groq TTS integration
+- VivaAgent Q&A
+
+### Phase 7 — Polish + Production (Week 8)
+- Analytics page
+- Settings page
+- Faculty Dashboard (basic)
+- Deployment (Railway/Render/VPS)
+- Landing page
+
+---
+
+## 13. Sample Test Suite JSON (Full Example)
+
+```json
+{
+  "project": {
+    "name": "125 Gor Kadva Patel Samaj Matrimony Website",
+    "base_url": "http://localhost:3000",
+    "description": "A matchmaking platform with user registration, profile management, search/filter, interest request system, private chat after acceptance, and admin management panel.",
+    "tech_stack": "React + Node.js + MongoDB"
+  },
+  "auth": {
+    "login_url": "/login",
+    "credentials": [
+      { "role": "admin", "username": "admin@matrimony.com", "password": "Admin@123" },
+      { "role": "user_a", "username": "userA@test.com", "password": "User@123" },
+      { "role": "user_b", "username": "userB@test.com", "password": "User@123" }
+    ]
+  },
+  "test_cases": [
+    {
+      "id": "TC_001",
+      "title": "User registration with valid data",
+      "priority": "high",
+      "role": "user_a",
+      "steps": [
+        { "action": "navigate", "value": "/register" },
+        { "action": "fill", "target": "Full Name", "value": "Rahul Patel" },
+        { "action": "fill", "target": "Email", "value": "newuser@test.com" },
+        { "action": "fill", "target": "Password", "value": "Test@1234" },
+        { "action": "click", "target": "Register" }
+      ],
+      "expected": {
+        "url_contains": "/login",
+        "page_contains": "Registration successful"
+      }
+    },
+    {
+      "id": "TC_002",
+      "title": "User login and dashboard access",
+      "priority": "high",
+      "role": "user_a",
+      "steps": [
+        { "action": "navigate", "value": "/login" },
+        { "action": "fill", "target": "Email", "value": "userA@test.com" },
+        { "action": "fill", "target": "Password", "value": "User@123" },
+        { "action": "click", "target": "Login" }
+      ],
+      "expected": {
+        "url_contains": "/dashboard",
+        "page_contains": "Welcome"
+      }
+    },
+    {
+      "id": "TC_003",
+      "title": "Search for potential matches with filter",
+      "priority": "high",
+      "role": "user_a",
+      "steps": [
+        { "action": "navigate", "value": "/search" },
+        { "action": "fill", "target": "Age From", "value": "25" },
+        { "action": "fill", "target": "Age To", "value": "30" },
+        { "action": "click", "target": "Search" }
+      ],
+      "expected": {
+        "page_contains": "profiles found"
+      }
+    }
+  ],
+  "evaluation": {
+    "capture_screenshots": true,
+    "capture_console_errors": true,
+    "max_time_per_test_seconds": 60,
+    "retry_failed_steps": 1
+  }
+}
+```
+
+---
+
+## 14. Deployment Architecture (Production)
+
+```
+Frontend:  Vercel (Next.js)
+Backend:   Railway or Render (FastAPI + Celery)
+Database:  Supabase (PostgreSQL)
+Redis:     Railway Redis or Upstash
+Storage:   Cloudflare R2 (screenshots/reports)
+Auth:      Supabase Auth or custom JWT
+Domain:    autoviva.ai (suggested)
+```
+
+**Note:** PinchTab browser agent runs LOCALLY on the student's machine. The frontend/backend can be hosted in cloud, but the browser controller must run locally where the project runs on localhost.
+
+**Local Agent Setup for Students:**
+```bash
+# Student installs AutoViva Agent CLI
+npm install -g autoviva-agent
+
+# Start local agent (connects to cloud backend)
+autoviva-agent start --token YOUR_USER_TOKEN
+
+# Agent registers itself → backend knows browser is ready → runs start
+```
+
+---
+
+## 15. Summary
+
+AutoViva AI is a production-grade SaaS platform with:
+
+- 14 fully designed pages
+- 7 specialized AI agents (AgentScope)
+- Real-time WebSocket log streaming
+- PinchTab browser control + Playwright fallback
+- Groq-powered AI (planning, assertions, reports, voice viva)
+- PostgreSQL-backed structured storage
+- PDF report generation
+- Evidence-linked anti-hallucination reporting
+- Role-based access (Student, Faculty, Judge)
+- Scoring rubric with grade mapping
+- Secure credential management
+- Voice Viva Mode with STT + TTS
+- Faculty bulk evaluation dashboard
+
+**The system ensures every claim in a report is backed by a screenshot, URL match, or page text — no AI hallucination of results.**
+
+---
+
+*AutoViva AI — Proof-based project evaluation for students, faculty, and hackathon judges.*

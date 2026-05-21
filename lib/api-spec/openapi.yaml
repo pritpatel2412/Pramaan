@@ -3,20 +3,36 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: AutoViva AI API specification
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: auth
+    description: Authentication operations
+  - name: projects
+    description: Project management
+  - name: credentials
+    description: Project credentials
+  - name: testSuites
+    description: Test suite management
+  - name: runs
+    description: Evaluation runs
+  - name: reports
+    description: Evaluation reports
+  - name: analytics
+    description: Analytics and statistics
+  - name: ai
+    description: AI-powered features
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +40,611 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  # ── Auth ──────────────────────────────────────────────────────────────────
+  /auth/register:
+    post:
+      operationId: register
+      tags: [auth]
+      summary: Register new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterInput"
+      responses:
+        "201":
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginInput"
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Logout
+      responses:
+        "200":
+          description: Logged out
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get current user
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ── Projects ──────────────────────────────────────────────────────────────
+  /projects:
+    get:
+      operationId: listProjects
+      tags: [projects]
+      summary: List user projects
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, archived]
+      responses:
+        "200":
+          description: Projects list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Project"
+    post:
+      operationId: createProject
+      tags: [projects]
+      summary: Create project
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectInput"
+      responses:
+        "201":
+          description: Project created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+
+  /projects/{projectId}:
+    get:
+      operationId: getProject
+      tags: [projects]
+      summary: Get project
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      operationId: updateProject
+      tags: [projects]
+      summary: Update project
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectUpdate"
+      responses:
+        "200":
+          description: Updated project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+    delete:
+      operationId: deleteProject
+      tags: [projects]
+      summary: Delete project
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
+  # ── Credentials ───────────────────────────────────────────────────────────
+  /projects/{projectId}/credentials:
+    get:
+      operationId: listCredentials
+      tags: [credentials]
+      summary: List project credentials
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Credentials list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Credential"
+    post:
+      operationId: createCredential
+      tags: [credentials]
+      summary: Add credential
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CredentialInput"
+      responses:
+        "201":
+          description: Credential created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Credential"
+
+  /projects/{projectId}/credentials/{credentialId}:
+    delete:
+      operationId: deleteCredential
+      tags: [credentials]
+      summary: Delete credential
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: credentialId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
+  # ── Test Suites ───────────────────────────────────────────────────────────
+  /projects/{projectId}/test-suites:
+    get:
+      operationId: listTestSuites
+      tags: [testSuites]
+      summary: List test suites for project
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Test suites
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TestSuite"
+    post:
+      operationId: createTestSuite
+      tags: [testSuites]
+      summary: Create test suite
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TestSuiteInput"
+      responses:
+        "201":
+          description: Test suite created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TestSuite"
+
+  /test-suites/{suiteId}:
+    get:
+      operationId: getTestSuite
+      tags: [testSuites]
+      summary: Get test suite
+      parameters:
+        - name: suiteId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Test suite
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TestSuite"
+    put:
+      operationId: updateTestSuite
+      tags: [testSuites]
+      summary: Update test suite
+      parameters:
+        - name: suiteId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TestSuiteUpdate"
+      responses:
+        "200":
+          description: Updated test suite
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TestSuite"
+    delete:
+      operationId: deleteTestSuite
+      tags: [testSuites]
+      summary: Delete test suite
+      parameters:
+        - name: suiteId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
+  /test-suites/generate:
+    post:
+      operationId: generateTestCases
+      tags: [testSuites, ai]
+      summary: AI-generate test cases from project description
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TestGenerateInput"
+      responses:
+        "200":
+          description: Generated test cases
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TestGenerateResponse"
+
+  # ── Runs ──────────────────────────────────────────────────────────────────
+  /runs:
+    get:
+      operationId: listRuns
+      tags: [runs]
+      summary: List all evaluation runs for user
+      parameters:
+        - name: projectId
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, running, completed, failed]
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Runs list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TestRun"
+
+  /runs/start:
+    post:
+      operationId: startRun
+      tags: [runs]
+      summary: Start an evaluation run
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RunStartInput"
+      responses:
+        "201":
+          description: Run started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TestRun"
+
+  /runs/{runId}:
+    get:
+      operationId: getRun
+      tags: [runs]
+      summary: Get run status and summary
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Run
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TestRun"
+
+  /runs/{runId}/results:
+    get:
+      operationId: getRunResults
+      tags: [runs]
+      summary: Get detailed test results for a run
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Test results
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TestResult"
+
+  /runs/{runId}/stop:
+    post:
+      operationId: stopRun
+      tags: [runs]
+      summary: Stop a running evaluation
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Run stopped
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
+  # ── Reports ───────────────────────────────────────────────────────────────
+  /runs/{runId}/report:
+    get:
+      operationId: getReport
+      tags: [reports]
+      summary: Get evaluation report
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Report"
+
+  /runs/{runId}/ask:
+    post:
+      operationId: askVivaAgent
+      tags: [reports, ai]
+      summary: Q&A with the Viva agent about the report
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VivaQuestionInput"
+      responses:
+        "200":
+          description: Viva agent answer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VivaAnswer"
+
+  # ── Analytics ─────────────────────────────────────────────────────────────
+  /analytics/overview:
+    get:
+      operationId: getAnalyticsOverview
+      tags: [analytics]
+      summary: Get overall analytics overview
+      responses:
+        "200":
+          description: Analytics overview
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalyticsOverview"
+
+  /analytics/projects/{projectId}:
+    get:
+      operationId: getProjectAnalytics
+      tags: [analytics]
+      summary: Get analytics for a specific project
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Project analytics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectAnalytics"
+
+  /analytics/score-trend:
+    get:
+      operationId: getScoreTrend
+      tags: [analytics]
+      summary: Get score trend over time
+      parameters:
+        - name: days
+          in: query
+          schema:
+            type: integer
+            default: 30
+      responses:
+        "200":
+          description: Score trend data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ScoreTrendPoint"
+
+  /dashboard/stats:
+    get:
+      operationId: getDashboardStats
+      tags: [analytics]
+      summary: Get dashboard summary stats
+      responses:
+        "200":
+          description: Dashboard stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardStats"
+
 components:
   schemas:
     HealthStatus:
@@ -31,6 +652,614 @@ components:
       properties:
         status:
           type: string
-      required:
-        - status
+      required: [status]
 
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required: [error]
+
+    MessageResponse:
+      type: object
+      properties:
+        message:
+          type: string
+      required: [message]
+
+    # ── Auth ────────────────────────────────────────────────────────────────
+    RegisterInput:
+      type: object
+      required: [name, email, password, role]
+      properties:
+        name:
+          type: string
+          minLength: 2
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+        college:
+          type: ["string", "null"]
+        role:
+          type: string
+          enum: [student, faculty, judge]
+
+    LoginInput:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+
+    AuthResponse:
+      type: object
+      required: [token, user]
+      properties:
+        token:
+          type: string
+        user:
+          $ref: "#/components/schemas/User"
+
+    User:
+      type: object
+      required: [id, name, email, role, plan, createdAt]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+        college:
+          type: ["string", "null"]
+        role:
+          type: string
+          enum: [student, faculty, judge]
+        plan:
+          type: string
+          enum: [free, pro, team]
+        createdAt:
+          type: string
+          format: date-time
+
+    # ── Projects ────────────────────────────────────────────────────────────
+    Project:
+      type: object
+      required: [id, userId, name, baseUrl, status, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        name:
+          type: string
+        description:
+          type: ["string", "null"]
+        baseUrl:
+          type: string
+        techStack:
+          type: ["string", "null"]
+        loginUrl:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [active, archived]
+        testSuiteCount:
+          type: ["integer", "null"]
+        runCount:
+          type: ["integer", "null"]
+        avgScore:
+          type: ["number", "null"]
+        lastRunAt:
+          type: ["string", "null"]
+        lastRunScore:
+          type: ["integer", "null"]
+        lastRunGrade:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ProjectInput:
+      type: object
+      required: [name, baseUrl]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        baseUrl:
+          type: string
+        techStack:
+          type: string
+        loginUrl:
+          type: string
+        loginPageType:
+          type: string
+        postLoginRedirect:
+          type: string
+
+    ProjectUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        baseUrl:
+          type: string
+        techStack:
+          type: string
+        loginUrl:
+          type: string
+        status:
+          type: string
+          enum: [active, archived]
+
+    # ── Credentials ─────────────────────────────────────────────────────────
+    Credential:
+      type: object
+      required: [id, projectId, role, username]
+      properties:
+        id:
+          type: string
+        projectId:
+          type: string
+        role:
+          type: string
+        username:
+          type: string
+
+    CredentialInput:
+      type: object
+      required: [role, username, password]
+      properties:
+        role:
+          type: string
+        username:
+          type: string
+        password:
+          type: string
+
+    # ── Test Suites ─────────────────────────────────────────────────────────
+    TestCase:
+      type: object
+      required: [id, title, priority, steps, expected]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        priority:
+          type: string
+          enum: [high, medium, low]
+        role:
+          type: ["string", "null"]
+        description:
+          type: ["string", "null"]
+        steps:
+          type: array
+          items:
+            $ref: "#/components/schemas/TestStep"
+        expected:
+          $ref: "#/components/schemas/ExpectedResult"
+
+    TestStep:
+      type: object
+      required: [action]
+      properties:
+        action:
+          type: string
+          enum: [navigate, click, fill, wait, screenshot, assert_text, assert_url, assert_element, scroll]
+        target:
+          type: ["string", "null"]
+        value:
+          type: ["string", "null"]
+
+    ExpectedResult:
+      type: object
+      properties:
+        urlContains:
+          type: ["string", "null"]
+        pageContains:
+          type: ["string", "null"]
+        elementVisible:
+          type: ["string", "null"]
+
+    TestSuite:
+      type: object
+      required: [id, projectId, name, jsonConfig, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        projectId:
+          type: string
+        name:
+          type: string
+        description:
+          type: ["string", "null"]
+        testCaseCount:
+          type: ["integer", "null"]
+        jsonConfig:
+          type: object
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    TestSuiteInput:
+      type: object
+      required: [name, jsonConfig]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        jsonConfig:
+          type: object
+
+    TestSuiteUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        jsonConfig:
+          type: object
+
+    TestGenerateInput:
+      type: object
+      required: [projectDescription]
+      properties:
+        projectDescription:
+          type: string
+        projectId:
+          type: ["string", "null"]
+        includeAuthTests:
+          type: boolean
+        includeCrudTests:
+          type: boolean
+        includeNavigationTests:
+          type: boolean
+        includeFormValidationTests:
+          type: boolean
+        includeRoleBasedTests:
+          type: boolean
+
+    TestGenerateResponse:
+      type: object
+      required: [testCases]
+      properties:
+        testCases:
+          type: array
+          items:
+            $ref: "#/components/schemas/TestCase"
+
+    # ── Runs ────────────────────────────────────────────────────────────────
+    TestRun:
+      type: object
+      required: [id, projectId, status, mode, createdAt]
+      properties:
+        id:
+          type: string
+        projectId:
+          type: string
+        suiteId:
+          type: ["string", "null"]
+        userId:
+          type: string
+        mode:
+          type: string
+          enum: [live_demo, pre_check, strict, quick_smoke]
+        status:
+          type: string
+          enum: [pending, running, completed, failed]
+        score:
+          type: ["integer", "null"]
+        grade:
+          type: ["string", "null"]
+        totalTests:
+          type: ["integer", "null"]
+        passed:
+          type: ["integer", "null"]
+        failed:
+          type: ["integer", "null"]
+        durationSeconds:
+          type: ["integer", "null"]
+        projectName:
+          type: ["string", "null"]
+        suiteName:
+          type: ["string", "null"]
+        startedAt:
+          type: ["string", "null"]
+        completedAt:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+
+    RunStartInput:
+      type: object
+      required: [projectId, suiteId, mode]
+      properties:
+        projectId:
+          type: string
+        suiteId:
+          type: string
+        mode:
+          type: string
+          enum: [live_demo, pre_check, strict, quick_smoke]
+        captureScreenshots:
+          type: boolean
+          default: true
+        captureConsoleErrors:
+          type: boolean
+          default: true
+        enableVoiceNarration:
+          type: boolean
+          default: false
+        stopOnFirstFailure:
+          type: boolean
+          default: false
+        maxTimePerTestSeconds:
+          type: integer
+          default: 60
+        retryFailedSteps:
+          type: integer
+          default: 1
+        headless:
+          type: boolean
+          default: false
+
+    TestResult:
+      type: object
+      required: [id, runId, testCaseId, title, status]
+      properties:
+        id:
+          type: string
+        runId:
+          type: string
+        testCaseId:
+          type: string
+        title:
+          type: string
+        status:
+          type: string
+          enum: [passed, failed, skipped, error]
+        stepsExecuted:
+          type: ["integer", "null"]
+        expectedResult:
+          type: object
+        actualResult:
+          type: object
+        errorMessage:
+          type: ["string", "null"]
+        durationSeconds:
+          type: ["number", "null"]
+        screenshots:
+          type: array
+          items:
+            $ref: "#/components/schemas/Screenshot"
+        executedAt:
+          type: ["string", "null"]
+
+    Screenshot:
+      type: object
+      required: [id, url]
+      properties:
+        id:
+          type: string
+        url:
+          type: string
+        stepNumber:
+          type: ["integer", "null"]
+        label:
+          type: ["string", "null"]
+
+    # ── Reports ─────────────────────────────────────────────────────────────
+    Report:
+      type: object
+      required: [id, runId, generatedAt]
+      properties:
+        id:
+          type: string
+        runId:
+          type: string
+        summary:
+          type: ["string", "null"]
+        aiNotes:
+          type: ["string", "null"]
+        suggestions:
+          type: array
+          items:
+            type: string
+        scoreBreakdown:
+          type: object
+        keyFindings:
+          type: array
+          items:
+            type: string
+        bugsFound:
+          type: array
+          items:
+            $ref: "#/components/schemas/BugItem"
+        featureCoverage:
+          type: array
+          items:
+            $ref: "#/components/schemas/FeatureCoverageItem"
+        run:
+          $ref: "#/components/schemas/TestRun"
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/TestResult"
+        generatedAt:
+          type: string
+          format: date-time
+
+    BugItem:
+      type: object
+      required: [issue, severity]
+      properties:
+        issue:
+          type: string
+        testCaseId:
+          type: ["string", "null"]
+        severity:
+          type: string
+          enum: [critical, major, minor]
+        description:
+          type: string
+
+    FeatureCoverageItem:
+      type: object
+      required: [feature, status]
+      properties:
+        feature:
+          type: string
+        status:
+          type: string
+          enum: [passed, failed, not_tested]
+
+    VivaQuestionInput:
+      type: object
+      required: [question]
+      properties:
+        question:
+          type: string
+
+    VivaAnswer:
+      type: object
+      required: [answer]
+      properties:
+        answer:
+          type: string
+        evidenceScreenshots:
+          type: array
+          items:
+            $ref: "#/components/schemas/Screenshot"
+        referencedTestCases:
+          type: array
+          items:
+            type: string
+
+    # ── Analytics ───────────────────────────────────────────────────────────
+    DashboardStats:
+      type: object
+      required: [totalProjects, totalRuns, avgScore, passRate]
+      properties:
+        totalProjects:
+          type: integer
+        totalRuns:
+          type: integer
+        avgScore:
+          type: ["number", "null"]
+        passRate:
+          type: ["number", "null"]
+        recentRuns:
+          type: array
+          items:
+            $ref: "#/components/schemas/TestRun"
+
+    AnalyticsOverview:
+      type: object
+      required: [totalRuns, avgScore, totalTestCasesRun, passRate]
+      properties:
+        totalRuns:
+          type: integer
+        avgScore:
+          type: ["number", "null"]
+        totalTestCasesRun:
+          type: integer
+        passRate:
+          type: ["number", "null"]
+        scoreDistribution:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScoreDistributionItem"
+        failuresByCategory:
+          type: array
+          items:
+            $ref: "#/components/schemas/CategoryFailureItem"
+        projectsComparison:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProjectComparisonItem"
+
+    ProjectAnalytics:
+      type: object
+      required: [projectId, totalRuns, bestScore, latestScore]
+      properties:
+        projectId:
+          type: string
+        totalRuns:
+          type: integer
+        bestScore:
+          type: ["integer", "null"]
+        latestScore:
+          type: ["integer", "null"]
+        avgScore:
+          type: ["number", "null"]
+        passRate:
+          type: ["number", "null"]
+
+    ScoreTrendPoint:
+      type: object
+      required: [date, score]
+      properties:
+        date:
+          type: string
+        score:
+          type: ["integer", "null"]
+        runId:
+          type: string
+        projectName:
+          type: ["string", "null"]
+
+    ScoreDistributionItem:
+      type: object
+      required: [grade, count]
+      properties:
+        grade:
+          type: string
+        count:
+          type: integer
+
+    CategoryFailureItem:
+      type: object
+      required: [category, failureCount]
+      properties:
+        category:
+          type: string
+        failureCount:
+          type: integer
+
+    ProjectComparisonItem:
+      type: object
+      required: [projectId, name, totalRuns]
+      properties:
+        projectId:
+          type: string
+        name:
+          type: string
+        bestScore:
+          type: ["integer", "null"]
+        latestScore:
+          type: ["integer", "null"]
+        totalRuns:
+          type: integer
+        trend:
+          type: ["string", "null"]
