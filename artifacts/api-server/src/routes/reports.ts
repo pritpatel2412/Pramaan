@@ -9,6 +9,7 @@ import path from "path";
 import os from "os";
 import { getClient } from "../lib/agents";
 import { chromium } from "playwright";
+import OpenAI from "openai";
 
 const router = Router();
 
@@ -148,9 +149,10 @@ router.post("/runs/:runId/ask", requireAuth, async (req, res) => {
       fs.writeFileSync(tempFilePath, buffer);
 
       const client = getClient();
+      const whisperModel = process.env.GROQ_API_KEY ? "whisper-large-v3" : "whisper-1";
       const response = await client.audio.transcriptions.create({
         file: fs.createReadStream(tempFilePath),
-        model: "whisper-1",
+        model: whisperModel,
       });
 
       transcribedQuestion = response.text;
@@ -186,14 +188,43 @@ router.post("/runs/:runId/ask", requireAuth, async (req, res) => {
   let audioResponse: string | null = null;
   if (req.body.enableTts) {
     try {
-      const client = getClient();
-      const mp3 = await client.audio.speech.create({
-        model: "tts-1",
-        voice: "alloy",
-        input: answer,
-      });
-      const audioBuffer = Buffer.from(await mp3.arrayBuffer());
-      audioResponse = audioBuffer.toString("base64");
+      if (process.env.GROQ_API_KEY) {
+        if (process.env.REPLIT_AI_API_KEY) {
+          const replitClient = new OpenAI({
+            apiKey: process.env.REPLIT_AI_API_KEY,
+            baseURL: "https://api.replit.com/v1/ai/openai",
+          });
+          const mp3 = await replitClient.audio.speech.create({
+            model: "tts-1",
+            voice: "alloy",
+            input: answer,
+          });
+          const audioBuffer = Buffer.from(await mp3.arrayBuffer());
+          audioResponse = audioBuffer.toString("base64");
+        } else if (process.env.OPENAI_API_KEY) {
+          const openaiClient = new OpenAI({
+            apiKey: process.env.OPENAI_API_KEY,
+          });
+          const mp3 = await openaiClient.audio.speech.create({
+            model: "tts-1",
+            voice: "alloy",
+            input: answer,
+          });
+          const audioBuffer = Buffer.from(await mp3.arrayBuffer());
+          audioResponse = audioBuffer.toString("base64");
+        } else {
+          console.warn("TTS requested, but Groq doesn't support TTS and no fallback key is set.");
+        }
+      } else {
+        const client = getClient();
+        const mp3 = await client.audio.speech.create({
+          model: "tts-1",
+          voice: "alloy",
+          input: answer,
+        });
+        const audioBuffer = Buffer.from(await mp3.arrayBuffer());
+        audioResponse = audioBuffer.toString("base64");
+      }
     } catch (ttsErr) {
       console.error("TTS generation failed:", ttsErr);
     }

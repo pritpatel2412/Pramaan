@@ -1,17 +1,46 @@
 import OpenAI from "openai";
 
-const MODEL = "gpt-5.2";
-
-function getClient(): OpenAI {
-  const apiKey = process.env.REPLIT_AI_API_KEY;
-  if (!apiKey) {
-    throw new Error("REPLIT_AI_API_KEY is not set. Please add the OpenAI integration in Replit.");
-  }
-  return new OpenAI({
-    apiKey,
-    baseURL: "https://api.replit.com/v1/ai/openai",
-  });
+interface AIClientConfig {
+  client: OpenAI;
+  model: string;
 }
+
+export function getAIConfig(): AIClientConfig {
+  const groqApiKey = process.env.GROQ_API_KEY;
+  if (groqApiKey) {
+    return {
+      client: new OpenAI({
+        apiKey: groqApiKey,
+        baseURL: "https://api.groq.com/openai/v1",
+      }),
+      model: "llama-3.3-70b-versatile",
+    };
+  }
+
+  const openAiApiKey = process.env.OPENAI_API_KEY;
+  if (openAiApiKey) {
+    return {
+      client: new OpenAI({
+        apiKey: openAiApiKey,
+      }),
+      model: "gpt-4o-mini",
+    };
+  }
+
+  const replitApiKey = process.env.REPLIT_AI_API_KEY;
+  if (replitApiKey) {
+    return {
+      client: new OpenAI({
+        apiKey: replitApiKey,
+        baseURL: "https://api.replit.com/v1/ai/openai",
+      }),
+      model: "gpt-5.2",
+    };
+  }
+
+  throw new Error("No LLM API Key (GROQ_API_KEY, OPENAI_API_KEY, or REPLIT_AI_API_KEY) is configured.");
+}
+
 
 export async function generateTestCasesWithAI(input: {
   projectDescription: string;
@@ -57,8 +86,9 @@ Return a JSON array of test cases. Each test case must follow this exact schema:
 Return ONLY a valid JSON array, no markdown, no explanation.`;
 
   try {
-    const response = await getClient().chat.completions.create({
-      model: MODEL,
+    const { client, model } = getAIConfig();
+    const response = await client.chat.completions.create({
+      model,
       messages: [{ role: "user", content: prompt }],
       temperature: 0.7,
       max_tokens: 2000,
@@ -231,8 +261,9 @@ Return a JSON object with this exact structure:
 Return ONLY valid JSON, no markdown.`;
 
   try {
-    const response = await getClient().chat.completions.create({
-      model: MODEL,
+    const { client, model } = getAIConfig();
+    const response = await client.chat.completions.create({
+      model,
       messages: [{ role: "user", content: prompt }],
       temperature: 0.6,
       max_tokens: 1500,
@@ -313,8 +344,9 @@ Examiner Question: "${question}"
 Answer the question professionally, citing specific test cases and evidence where relevant. Be concise but thorough. Do not make up results — only reference what is in the evaluation data above.`;
 
   try {
-    const response = await getClient().chat.completions.create({
-      model: MODEL,
+    const { client, model } = getAIConfig();
+    const response = await client.chat.completions.create({
+      model,
       messages: [{ role: "user", content: prompt }],
       temperature: 0.5,
       max_tokens: 500,

@@ -53,10 +53,30 @@ export default defineConfig({
     fs: {
       strict: true,
     },
+    proxy: {
+      "/api": {
+        target: `http://localhost:${process.env.PORT_API || "8080"}`,
+        changeOrigin: true,
+      },
+      "/screenshots": {
+        target: `http://localhost:${process.env.PORT_API || "8080"}`,
+        changeOrigin: true,
+      },
+    },
   },
   preview: {
     port,
     host: "0.0.0.0",
     allowedHosts: true,
+    proxy: {
+      "/api": {
+        target: `http://localhost:${process.env.PORT_API || "8080"}`,
+        changeOrigin: true,
+      },
+      "/screenshots": {
+        target: `http://localhost:${process.env.PORT_API || "8080"}`,
+        changeOrigin: true,
+      },
+    },
   },
 });

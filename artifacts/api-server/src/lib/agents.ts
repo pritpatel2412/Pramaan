@@ -6,9 +6,16 @@ import crypto from "crypto";
 const ENCRYPT_KEY = (process.env.SESSION_SECRET || "autoviva-encrypt-key-24chars!!").padEnd(32, "0").slice(0, 32);
 
 export function getClient(): OpenAI {
+  const groqApiKey = process.env.GROQ_API_KEY;
+  if (groqApiKey) {
+    return new OpenAI({
+      apiKey: groqApiKey,
+      baseURL: "https://api.groq.com/openai/v1",
+    });
+  }
   const apiKey = process.env.OPENAI_API_KEY || process.env.REPLIT_AI_API_KEY;
   if (!apiKey) {
-    throw new Error("Neither OPENAI_API_KEY nor REPLIT_AI_API_KEY is set in environment.");
+    throw new Error("Neither GROQ_API_KEY, OPENAI_API_KEY, nor REPLIT_AI_API_KEY is set in environment.");
   }
   if (process.env.REPLIT_AI_API_KEY && !process.env.OPENAI_API_KEY) {
     return new OpenAI({
@@ -21,7 +28,10 @@ export function getClient(): OpenAI {
   });
 }
 
-export const MODEL = process.env.OPENAI_MODEL || (process.env.OPENAI_API_KEY ? "gpt-4o-mini" : "gpt-5.2");
+export const MODEL = process.env.GROQ_API_KEY
+  ? "llama-3.3-70b-versatile"
+  : (process.env.OPENAI_MODEL || (process.env.OPENAI_API_KEY ? "gpt-4o-mini" : "gpt-5.2"));
+
 
 /**
  * Decrypt helper for passwords

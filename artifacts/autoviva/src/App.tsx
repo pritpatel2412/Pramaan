@@ -20,6 +20,7 @@ import RunNew from "@/pages/run-new";
 import RunLive from "@/pages/run-live";
 import RunReport from "@/pages/run-report";
 import RunViva from "@/pages/run-viva";
+import Runs from "@/pages/runs";
 import Analytics from "@/pages/analytics";
 import Settings from "@/pages/settings";
 import Faculty from "@/pages/faculty";
@@ -65,6 +66,7 @@ function Router() {
       <Route path="/runs/:runId/live"><ProtectedRoute component={RunLive} /></Route>
       <Route path="/runs/:runId/report"><ProtectedRoute component={RunReport} /></Route>
       <Route path="/runs/:runId/viva"><ProtectedRoute component={RunViva} /></Route>
+      <Route path="/runs"><ProtectedRoute component={Runs} /></Route>
       
       <Route path="/analytics"><ProtectedRoute component={Analytics} /></Route>
       <Route path="/settings"><ProtectedRoute component={Settings} /></Route>
