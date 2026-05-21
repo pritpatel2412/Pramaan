@@ -41,6 +41,7 @@ export default function RunNew() {
   const [selectedProjectId, setSelectedProjectId] = useState(preselectedProjectId);
   const [selectedSuiteId, setSelectedSuiteId] = useState(preselectedSuiteId);
   const [mode, setMode] = useState<EvalMode>("live_demo");
+  const [multiBrowser, setMultiBrowser] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const { data: projects, isLoading: projectsLoading } = useListProjects(
@@ -77,7 +78,7 @@ export default function RunNew() {
     setError(null);
 
     startRun.mutate(
-      { data: { projectId: selectedProjectId, suiteId: selectedSuiteId, mode } },
+      { data: { projectId: selectedProjectId, suiteId: selectedSuiteId, mode, multiBrowser } },
       {
         onSuccess: (run) => setLocation(`/runs/${run.id}/live`),
         onError: (err: any) => setError(err?.data?.error ?? "Failed to start evaluation"),
@@ -209,6 +210,64 @@ export default function RunNew() {
                   <p className="text-xs text-muted-foreground leading-relaxed">{m.desc}</p>
                 </button>
               ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Multi-Browser Visual Regression */}
+        <Card className="relative overflow-hidden border-border bg-card/40 backdrop-blur-md">
+          {multiBrowser && (
+            <div className="absolute top-0 right-0 w-[300px] h-[300px] bg-primary/5 rounded-full blur-[80px] pointer-events-none" />
+          )}
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between">
+              <span>3. Cross-Browser Visual Regression</span>
+              <span className="text-[10px] uppercase tracking-wider bg-orange-500/10 text-orange-400 px-2 py-0.5 rounded border border-orange-500/20">Advanced</span>
+            </CardTitle>
+            <CardDescription>Evaluate browser compatibility and layout drift pixel-by-pixel</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div 
+              onClick={() => setMultiBrowser(!multiBrowser)}
+              className={`flex items-start gap-4 p-4 rounded-xl border cursor-pointer transition-all ${
+                multiBrowser 
+                  ? "border-primary bg-primary/5" 
+                  : "border-border hover:border-primary/30"
+              }`}
+            >
+              <div className="flex items-center h-5">
+                <input
+                  type="checkbox"
+                  checked={multiBrowser}
+                  onChange={() => {}}
+                  className="h-4 w-4 rounded border-border bg-background text-primary focus:ring-0 focus:ring-offset-0"
+                />
+              </div>
+              <div className="flex-1 space-y-1">
+                <p className="text-sm font-semibold text-foreground">
+                  Enable Sequential Cross-Browser Validation
+                </p>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Automatically launches test cases across Chromium (baseline), Firefox, and Safari (WebKit).
+                  Calculates pixel mismatches and renders an interactive slider compare overlay in your report.
+                </p>
+                
+                {/* Browser Logos */}
+                <div className="flex items-center gap-4 mt-3 pt-3 border-t border-border/40">
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span className="w-2 h-2 rounded-full bg-blue-400" />
+                    Chromium
+                  </div>
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span className="w-2 h-2 rounded-full bg-orange-400" />
+                    Firefox
+                  </div>
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span className="w-2 h-2 rounded-full bg-purple-400" />
+                    WebKit (Safari)
+                  </div>
+                </div>
+              </div>
             </div>
           </CardContent>
         </Card>

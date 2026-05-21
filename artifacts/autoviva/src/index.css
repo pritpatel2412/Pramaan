@@ -68,87 +68,6 @@
 
 /* LIGHT MODE - We default to dark mode, so light mode is just a generic fallback here */
 :root {
-  --button-outline: rgba(0,0,0, .10);
-  --badge-outline: rgba(0,0,0, .05);
-  --opaque-button-border-intensity: -8;
-
-  --elevate-1: rgba(0,0,0, .03);
-  --elevate-2: rgba(0,0,0, .08);
-
-  --background: 220 20% 98%;
-  --foreground: 220 20% 10%;
-  --border: 220 15% 90%;
-  --card: 0 0% 100%;
-  --card-foreground: 220 20% 10%;
-  --card-border: 220 15% 90%;
-  
-  --sidebar: 0 0% 100%;
-  --sidebar-foreground: 220 20% 10%;
-  --sidebar-border: 220 15% 90%;
-  --sidebar-primary: 189 100% 40%;
-  --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 220 15% 95%;
-  --sidebar-accent-foreground: 220 20% 10%;
-  --sidebar-ring: 189 100% 40%;
-
-  --popover: 0 0% 100%;
-  --popover-foreground: 220 20% 10%;
-  --popover-border: 220 15% 90%;
-  
-  --primary: 189 100% 35%;
-  --primary-foreground: 0 0% 100%;
-  --secondary: 220 15% 90%;
-  --secondary-foreground: 220 20% 10%;
-  --muted: 220 15% 95%;
-  --muted-foreground: 220 10% 40%;
-  --accent: 189 100% 90%;
-  --accent-foreground: 189 100% 25%;
-  --destructive: 0 84% 60%;
-  --destructive-foreground: 0 0% 100%;
-  
-  --input: 220 15% 90%;
-  --ring: 189 100% 40%;
-  
-  --chart-1: 189 100% 40%;
-  --chart-2: 250 80% 60%;
-  --chart-3: 150 80% 40%;
-  --chart-4: 45 100% 50%;
-  --chart-5: 0 80% 60%;
-
-  --app-font-sans: 'Outfit', sans-serif;
-  --app-font-serif: Georgia, serif;
-  --app-font-mono: 'Space Mono', monospace;
-  --radius: 0.25rem;
-  
-  --shadow-2xs: 0px 2px 0px 0px hsl(0 0% 0% / 0.05);
-  --shadow-xs: 0px 2px 0px 0px hsl(0 0% 0% / 0.05);
-  --shadow-sm: 0px 2px 0px 0px hsl(0 0% 0% / 0.05), 0px 1px 2px -1px hsl(0 0% 0% / 0.05);
-  --shadow: 0px 2px 0px 0px hsl(0 0% 0% / 0.05), 0px 1px 2px -1px hsl(0 0% 0% / 0.05);
-  --shadow-md: 0px 2px 0px 0px hsl(0 0% 0% / 0.05), 0px 2px 4px -1px hsl(0 0% 0% / 0.05);
-  --shadow-lg: 0px 2px 0px 0px hsl(0 0% 0% / 0.05), 0px 4px 6px -1px hsl(0 0% 0% / 0.05);
-  --shadow-xl: 0px 2px 0px 0px hsl(0 0% 0% / 0.05), 0px 8px 10px -1px hsl(0 0% 0% / 0.05);
-  --shadow-2xl: 0px 2px 0px 0px hsl(0 0% 0% / 0.05);
-  --tracking-normal: 0em;
-  --spacing: 0.25rem;
-
-  --sidebar-primary-border: hsl(var(--sidebar-primary));
-  --sidebar-primary-border: hsl(from hsl(var(--sidebar-primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
-  --sidebar-accent-border: hsl(var(--sidebar-accent));
-  --sidebar-accent-border: hsl(from hsl(var(--sidebar-accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
-  --primary-border: hsl(var(--primary));
-  --primary-border: hsl(from hsl(var(--primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
-  --secondary-border: hsl(var(--secondary));
-  --secondary-border: hsl(from hsl(var(--secondary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
-  --muted-border: hsl(var(--muted));
-  --muted-border: hsl(from hsl(var(--muted)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
-  --accent-border: hsl(var(--accent));
-  --accent-border: hsl(from hsl(var(--accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
-  --destructive-border: hsl(var(--destructive));
-  --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
-}
-
-/* DARK MODE - The main theme for this precision instrument */
-.dark {
   --button-outline: rgba(255,255,255, .10);
   --badge-outline: rgba(255,255,255, .05);
   --opaque-button-border-intensity: 9;
@@ -156,61 +75,152 @@
   --elevate-1: rgba(255,255,255, .04);
   --elevate-2: rgba(255,255,255, .09);
 
-  /* Very dark, desaturated blue/gray background */
-  --background: 224 71% 4%;
-  --foreground: 210 40% 98%;
-  --border: 224 71% 12%;
+  /* Resend pure black design tokens */
+  --background: 0 0% 0%; /* #000000 */
+  --foreground: 210 40% 99%; /* #fcfdff */
+  --border: 0 0% 6%; /* rgba(255,255,255,0.06) */
+  --card: 240 10% 4%; /* #0a0a0c */
+  --card-foreground: 210 40% 99%;
+  --card-border: 0 0% 14%; /* rgba(255,255,255,0.14) */
   
-  --card: 224 71% 6%;
-  --card-foreground: 210 40% 98%;
-  --card-border: 224 71% 12%;
-  
-  --sidebar: 224 71% 5%;
-  --sidebar-foreground: 210 40% 98%;
-  --sidebar-border: 224 71% 12%;
-  --sidebar-primary: 189 100% 50%;
-  --sidebar-primary-foreground: 224 71% 4%;
-  --sidebar-accent: 224 71% 12%;
-  --sidebar-accent-foreground: 210 40% 98%;
-  --sidebar-ring: 189 100% 50%;
+  --sidebar: 0 0% 0%; /* true black sidebar */
+  --sidebar-foreground: 210 40% 99%;
+  --sidebar-border: 0 0% 6%;
+  --sidebar-primary: 0 0% 100%;
+  --sidebar-primary-foreground: 0 0% 0%;
+  --sidebar-accent: 240 10% 4%;
+  --sidebar-accent-foreground: 210 40% 99%;
+  --sidebar-ring: 0 0% 100%;
 
-  --popover: 224 71% 6%;
-  --popover-foreground: 210 40% 98%;
-  --popover-border: 224 71% 12%;
+  --popover: 240 10% 4%;
+  --popover-foreground: 210 40% 99%;
+  --popover-border: 0 0% 14%;
   
-  /* Electric cyan primary */
-  --primary: 189 100% 50%;
-  --primary-foreground: 224 71% 4%;
+  /* Primary White CTA Button design pattern */
+  --primary: 0 0% 100%; /* Pure white */
+  --primary-foreground: 0 0% 0%; /* Pure black text */
   
-  --secondary: 224 71% 15%;
-  --secondary-foreground: 210 40% 98%;
+  --secondary: 240 10% 6%; /* #101012 */
+  --secondary-foreground: 210 40% 99%;
   
-  --muted: 224 71% 12%;
-  --muted-foreground: 215 20% 65%;
+  --muted: 240 10% 4%;
+  --muted-foreground: 210 10% 65%;
   
-  --accent: 189 100% 15%;
-  --accent-foreground: 189 100% 50%;
+  --accent: 240 10% 6%;
+  --accent-foreground: 0 0% 100%;
   
-  --destructive: 0 84% 60%;
-  --destructive-foreground: 210 40% 98%;
+  --destructive: 343 100% 56%; /* #ff2047 */
+  --destructive-foreground: 0 0% 100%;
   
-  --input: 224 71% 16%;
-  --ring: 189 100% 50%;
+  --input: 240 10% 4%;
+  --ring: 0 0% 100%;
   
-  --chart-1: 189 100% 50%;
-  --chart-2: 250 80% 70%;
-  --chart-3: 150 80% 50%;
-  --chart-4: 45 100% 60%;
-  --chart-5: 0 80% 60%;
+  --chart-1: 0 0% 100%;
+  --chart-2: 210 100% 62%;
+  --chart-3: 150 100% 54%;
+  --chart-4: 45 100% 62%;
+  --chart-5: 343 100% 56%;
 
-  --shadow-2xs: 0px 2px 0px 0px hsl(0 0% 0% / 0.5);
-  --shadow-xs: 0px 2px 0px 0px hsl(0 0% 0% / 0.5);
-  --shadow-sm: 0px 2px 0px 0px hsl(0 0% 0% / 0.5), 0px 1px 2px -1px hsl(0 0% 0% / 0.5);
-  --shadow: 0px 2px 0px 0px hsl(0 0% 0% / 0.5), 0px 1px 2px -1px hsl(0 0% 0% / 0.5);
-  --shadow-md: 0px 2px 0px 0px hsl(0 0% 0% / 0.5), 0px 2px 4px -1px hsl(0 0% 0% / 0.5);
-  --shadow-lg: 0px 2px 0px 0px hsl(0 0% 0% / 0.5), 0px 4px 6px -1px hsl(0 0% 0% / 0.5);
-  --shadow-xl: 0px 2px 0px 0px hsl(0 0% 0% / 0.5), 0px 8px 10px -1px hsl(0 0% 0% / 0.5);
-  --shadow-2xl: 0px 2px 0px 0px hsl(0 0% 0% / 0.5);
+  --app-font-sans: 'Geist', 'Inter', sans-serif;
+  --app-font-serif: 'Playfair Display', Georgia, serif;
+  --app-font-mono: 'Geist Mono', 'Space Mono', monospace;
+  --radius: 0.75rem; /* {rounded.lg} - 12px default */
+  
+  --shadow-2xs: none;
+  --shadow-xs: none;
+  --shadow-sm: none;
+  --shadow: none;
+  --shadow-md: none;
+  --shadow-lg: none;
+  --shadow-xl: none;
+  --shadow-2xl: none;
+  --tracking-normal: -0.02em;
+  --spacing: 0.25rem;
+
+  --sidebar-primary-border: hsl(var(--sidebar-primary));
+  --sidebar-accent-border: hsl(var(--sidebar-accent));
+  --primary-border: hsl(var(--primary));
+  --secondary-border: hsl(var(--secondary));
+  --muted-border: hsl(var(--muted));
+  --accent-border: hsl(var(--accent));
+  --destructive-border: hsl(var(--destructive));
+}
+
+.dark {
+  /* Copy the exact same tokens to dark to be highly resilient */
+  --button-outline: rgba(255,255,255, .10);
+  --badge-outline: rgba(255,255,255, .05);
+  --opaque-button-border-intensity: 9;
+
+  --elevate-1: rgba(255,255,255, .04);
+  --elevate-2: rgba(255,255,255, .09);
+
+  --background: 0 0% 0%;
+  --foreground: 210 40% 99%;
+  --border: 0 0% 6%;
+  
+  --card: 240 10% 4%;
+  --card-foreground: 210 40% 99%;
+  --card-border: 0 0% 14%;
+  
+  --sidebar: 0 0% 0%;
+  --sidebar-foreground: 210 40% 99%;
+  --sidebar-border: 0 0% 6%;
+  --sidebar-primary: 0 0% 100%;
+  --sidebar-primary-foreground: 0 0% 0%;
+  --sidebar-accent: 240 10% 4%;
+  --sidebar-accent-foreground: 210 40% 99%;
+  --sidebar-ring: 0 0% 100%;
+
+  --popover: 240 10% 4%;
+  --popover-foreground: 210 40% 99%;
+  --popover-border: 0 0% 14%;
+  
+  --primary: 0 0% 100%;
+  --primary-foreground: 0 0% 0%;
+  
+  --secondary: 240 10% 6%;
+  --secondary-foreground: 210 40% 99%;
+  
+  --muted: 240 10% 4%;
+  --muted-foreground: 210 10% 65%;
+  
+  --accent: 240 10% 6%;
+  --accent-foreground: 0 0% 100%;
+  
+  --destructive: 343 100% 56%;
+  --destructive-foreground: 0 0% 100%;
+  
+  --input: 240 10% 4%;
+}
+
+/* Custom Editorial Fonts & Atmospheric Glow Utilities */
+.font-display {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-feature-settings: "ss01", "liga";
+}
+.font-favorit {
+  font-family: 'Geist', 'Inter', sans-serif;
+  letter-spacing: -0.02em;
+}
+.font-code {
+  font-family: 'Geist Mono', 'Space Mono', monospace;
+}
+
+.glow-orange {
+  background: radial-gradient(circle at top, rgba(255, 89, 0, 0.12) 0%, rgba(0, 0, 0, 0) 60%);
+}
+.glow-blue {
+  background: radial-gradient(circle at top, rgba(0, 117, 255, 0.14) 0%, rgba(0, 0, 0, 0) 60%);
+}
+.glow-green {
+  background: radial-gradient(circle at top, rgba(34, 255, 153, 0.10) 0%, rgba(0, 0, 0, 0) 60%);
+}
+.glow-red {
+  background: radial-gradient(circle at top, rgba(255, 32, 71, 0.14) 0%, rgba(0, 0, 0, 0) 60%);
+}
+.glow-yellow {
+  background: radial-gradient(circle at top, rgba(255, 197, 61, 0.10) 0%, rgba(0, 0, 0, 0) 60%);
 }
 
 @layer base {

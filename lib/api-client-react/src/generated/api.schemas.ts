@@ -300,6 +300,7 @@ export interface TestRun {
   startedAt?: string | null;
   /** @nullable */
   completedAt?: string | null;
+  multiBrowser?: boolean;
   createdAt: string;
 }
 
@@ -324,6 +325,7 @@ export interface RunStartInput {
   maxTimePerTestSeconds?: number;
   retryFailedSteps?: number;
   headless?: boolean;
+  multiBrowser?: boolean;
 }
 
 export type TestResultStatus = typeof TestResultStatus[keyof typeof TestResultStatus];

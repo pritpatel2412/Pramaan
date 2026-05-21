@@ -384,6 +384,8 @@ export const ListRunsQueryParams = zod.object({
   "limit": zod.coerce.number().default(listRunsQueryLimitDefault)
 })
 
+export const listRunsResponseMultiBrowserDefault = false;
+
 export const ListRunsResponseItem = zod.object({
   "id": zod.string(),
   "projectId": zod.string(),
@@ -401,6 +403,7 @@ export const ListRunsResponseItem = zod.object({
   "suiteName": zod.string().nullish(),
   "startedAt": zod.string().nullish(),
   "completedAt": zod.string().nullish(),
+  "multiBrowser": zod.boolean().default(listRunsResponseMultiBrowserDefault),
   "createdAt": zod.coerce.date()
 })
 export const ListRunsResponse = zod.array(ListRunsResponseItem)
@@ -416,6 +419,7 @@ export const startRunBodyStopOnFirstFailureDefault = false;
 export const startRunBodyMaxTimePerTestSecondsDefault = 60;
 export const startRunBodyRetryFailedStepsDefault = 1;
 export const startRunBodyHeadlessDefault = false;
+export const startRunBodyMultiBrowserDefault = false;
 
 export const StartRunBody = zod.object({
   "projectId": zod.string(),
@@ -427,7 +431,8 @@ export const StartRunBody = zod.object({
   "stopOnFirstFailure": zod.boolean().default(startRunBodyStopOnFirstFailureDefault),
   "maxTimePerTestSeconds": zod.number().default(startRunBodyMaxTimePerTestSecondsDefault),
   "retryFailedSteps": zod.number().default(startRunBodyRetryFailedStepsDefault),
-  "headless": zod.boolean().default(startRunBodyHeadlessDefault)
+  "headless": zod.boolean().default(startRunBodyHeadlessDefault),
+  "multiBrowser": zod.boolean().default(startRunBodyMultiBrowserDefault)
 })
 
 
@@ -437,6 +442,8 @@ export const StartRunBody = zod.object({
 export const GetRunParams = zod.object({
   "runId": zod.coerce.string()
 })
+
+export const getRunResponseMultiBrowserDefault = false;
 
 export const GetRunResponse = zod.object({
   "id": zod.string(),
@@ -455,6 +462,7 @@ export const GetRunResponse = zod.object({
   "suiteName": zod.string().nullish(),
   "startedAt": zod.string().nullish(),
   "completedAt": zod.string().nullish(),
+  "multiBrowser": zod.boolean().default(getRunResponseMultiBrowserDefault),
   "createdAt": zod.coerce.date()
 })
 
@@ -511,6 +519,8 @@ export const GetReportParams = zod.object({
   "runId": zod.coerce.string()
 })
 
+export const getReportResponseRunMultiBrowserDefault = false;
+
 export const GetReportResponse = zod.object({
   "id": zod.string(),
   "runId": zod.string(),
@@ -548,6 +558,7 @@ export const GetReportResponse = zod.object({
   "suiteName": zod.string().nullish(),
   "startedAt": zod.string().nullish(),
   "completedAt": zod.string().nullish(),
+  "multiBrowser": zod.boolean().default(getReportResponseRunMultiBrowserDefault),
   "createdAt": zod.coerce.date()
 }).optional(),
   "results": zod.array(zod.object({
@@ -665,6 +676,8 @@ export const GetScoreTrendResponse = zod.array(GetScoreTrendResponseItem)
 /**
  * @summary Get dashboard summary stats
  */
+export const getDashboardStatsResponseRecentRunsItemMultiBrowserDefault = false;
+
 export const GetDashboardStatsResponse = zod.object({
   "totalProjects": zod.number(),
   "totalRuns": zod.number(),
@@ -687,6 +700,7 @@ export const GetDashboardStatsResponse = zod.object({
   "suiteName": zod.string().nullish(),
   "startedAt": zod.string().nullish(),
   "completedAt": zod.string().nullish(),
+  "multiBrowser": zod.boolean().default(getDashboardStatsResponseRecentRunsItemMultiBrowserDefault),
   "createdAt": zod.coerce.date()
 })).optional()
 })

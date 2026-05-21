@@ -987,6 +987,9 @@ components:
           type: ["string", "null"]
         completedAt:
           type: ["string", "null"]
+        multiBrowser:
+          type: boolean
+          default: false
         createdAt:
           type: string
           format: date-time
@@ -1021,6 +1024,9 @@ components:
           type: integer
           default: 1
         headless:
+          type: boolean
+          default: false
+        multiBrowser:
           type: boolean
           default: false
 

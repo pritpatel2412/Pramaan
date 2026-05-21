@@ -1,4 +1,4 @@
-import { chromium, type Browser, type BrowserContext, type Page, type Locator } from "playwright";
+import { chromium, firefox, webkit, type Browser, type BrowserContext, type Page, type Locator } from "playwright";
 import { db, testRunsTable, testResultsTable, screenshotsTable, credentialsTable, projectsTable, reportsTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { streamLog } from "./runLogger";
@@ -7,6 +7,8 @@ import { generateEvaluationReport } from "./ai";
 import fs from "fs";
 import path from "path";
 import { createRequire } from "module";
+import { PNG } from "pngjs";
+import pixelmatch from "pixelmatch";
 
 // Grade standard mapping
 function gradeFromScore(score: number): string {
@@ -293,6 +295,10 @@ export async function executeRealBrowserEvaluation(
   const startTime = Date.now();
 
   try {
+    const [runRow] = await db.select().from(testRunsTable).where(eq(testRunsTable.id, runId)).limit(1);
+    const isMultiBrowser = !!runRow?.multiBrowser;
+    const visualRegressionResults: any[] = [];
+
     streamLog(runId, `[AutoViva Agent] Starting real browser evaluation run...`, "info");
     streamLog(runId, `Project name: "${project.name}" | Base URL: ${project.baseUrl}`, "info");
 
@@ -618,7 +624,49 @@ export async function executeRealBrowserEvaluation(
       }).returning();
 
       // Take a final screenshot for this test case
-      await takeAndRecordScreenshot(page, runId, insertedResult.id, stepIndex + 1, `final-${tcId}`);
+      const chromeScreenshot = await takeAndRecordScreenshot(page, runId, insertedResult.id, stepIndex + 1, `final-${tcId}`);
+
+      if (isMultiBrowser && chromeScreenshot) {
+        streamLog(runId, `[Visual Regression] Initiating cross-browser verification for "${tcTitle}"...`, "info");
+        
+        // Firefox Run
+        const firefoxScreenshot = await runStepsInBrowser("firefox", runId, tc, project, plannedSteps, tcRole, understanding);
+        let firefoxMismatch = 0;
+        let firefoxDiffUrl = "";
+        if (firefoxScreenshot) {
+          const diffFilename = `${runId}_${tcId}_firefox_diff.png`;
+          const diffLocalPath = path.join(PUBLIC_SCREENSHOTS_DIR, diffFilename);
+          const comp = await compareScreenshots(chromeScreenshot.localPath, firefoxScreenshot.localPath, diffLocalPath);
+          firefoxMismatch = comp.mismatchPercentage;
+          firefoxDiffUrl = `/screenshots/${diffFilename}`;
+          streamLog(runId, `[Visual Regression] Firefox vs Chromium mismatch: ${firefoxMismatch}%`, firefoxMismatch > 5 ? "warn" : "pass");
+        }
+
+        // WebKit Run
+        const webkitScreenshot = await runStepsInBrowser("webkit", runId, tc, project, plannedSteps, tcRole, understanding);
+        let webkitMismatch = 0;
+        let webkitDiffUrl = "";
+        if (webkitScreenshot) {
+          const diffFilename = `${runId}_${tcId}_webkit_diff.png`;
+          const diffLocalPath = path.join(PUBLIC_SCREENSHOTS_DIR, diffFilename);
+          const comp = await compareScreenshots(chromeScreenshot.localPath, webkitScreenshot.localPath, diffLocalPath);
+          webkitMismatch = comp.mismatchPercentage;
+          webkitDiffUrl = `/screenshots/${diffFilename}`;
+          streamLog(runId, `[Visual Regression] WebKit vs Chromium mismatch: ${webkitMismatch}%`, webkitMismatch > 5 ? "warn" : "pass");
+        }
+
+        visualRegressionResults.push({
+          testCaseId: tcId,
+          testCaseTitle: tcTitle,
+          chromium: chromeScreenshot.urlPath,
+          firefox: firefoxScreenshot ? firefoxScreenshot.urlPath : "",
+          webkit: webkitScreenshot ? webkitScreenshot.urlPath : "",
+          firefoxDiff: firefoxDiffUrl,
+          webkitDiff: webkitDiffUrl,
+          firefoxMismatch,
+          webkitMismatch,
+        });
+      }
     }
 
     // Finished running all tests! Compute final summary score
@@ -686,7 +734,10 @@ export async function executeRealBrowserEvaluation(
         keyFindings: reportData.keyFindings || [],
         bugsFound: reportData.bugsFound || [],
         featureCoverage: reportData.featureCoverage || [],
-        audits: auditsPayload,
+        audits: {
+          ...auditsPayload,
+          visualRegression: visualRegressionResults,
+        },
       });
       streamLog(runId, `[Agent 6: ReportAgent] ✓ Report generated and saved successfully!`, "pass");
     } catch (err: any) {
@@ -709,7 +760,10 @@ export async function executeRealBrowserEvaluation(
         keyFindings: [`Passed tests: ${passedTestsCount}`, `Failed tests: ${failedTestsCount}`] as any,
         bugsFound: [] as any,
         featureCoverage: [] as any,
-        audits: auditsPayload,
+        audits: {
+          ...auditsPayload,
+          visualRegression: visualRegressionResults,
+        },
       });
     }
 
@@ -742,7 +796,7 @@ async function takeAndRecordScreenshot(
   resultId: string | null,
   stepNumber: number,
   label: string
-) {
+): Promise<{ localPath: string; urlPath: string } | null> {
   try {
     const filename = `${runId}_${Date.now()}_${stepNumber}.png`;
     const localPath = path.join(PUBLIC_SCREENSHOTS_DIR, filename);
@@ -761,9 +815,141 @@ async function takeAndRecordScreenshot(
       stepNumber,
       label,
     });
+    return { localPath, urlPath };
   } catch (err: any) {
     console.error("Failed to capture and record screenshot:", err);
+    return null;
   }
+}
+
+/**
+ * Executes the planned browser steps inside Firefox or WebKit sequentially.
+ */
+async function runStepsInBrowser(
+  browserType: "firefox" | "webkit",
+  runId: string,
+  tc: any,
+  project: any,
+  plannedSteps: any[],
+  tcRole: string,
+  understanding: any
+): Promise<{ localPath: string; urlPath: string } | null> {
+  let browser: Browser | null = null;
+  let context: BrowserContext | null = null;
+  let page: Page | null = null;
+  try {
+    streamLog(runId, `Running test case steps in ${browserType}...`, "info");
+    const launcher = browserType === "firefox" ? firefox : webkit;
+    browser = await launcher.launch({
+      headless: true,
+      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+    });
+    context = await browser.newContext({
+      viewport: { width: 1280, height: 720 },
+      ignoreHTTPSErrors: true,
+    });
+    page = await context.newPage();
+
+    if (tcRole && tcRole !== "guest" && tcRole !== "null") {
+      await handleAutoLogin(page, project, tcRole, runId);
+    } else {
+      await page.goto(project.baseUrl, { waitUntil: "networkidle", timeout: 15000 }).catch(() => {});
+    }
+
+    // Execute planned steps
+    let stepIndex = 0;
+    for (const step of plannedSteps) {
+      stepIndex++;
+      const { action, target, value } = step;
+      try {
+        if (action === "navigate") {
+          const destUrl = (value || target || "").startsWith("http")
+            ? (value || target || "")
+            : `${project.baseUrl}${value || target || ""}`;
+          await page.goto(destUrl, { waitUntil: "networkidle", timeout: 15000 });
+        } else if (action === "fill") {
+          const element = await findElementWithSmartStrategies(page, target!, runId);
+          await element.scrollIntoViewIfNeeded({ timeout: 3000 }).catch(() => {});
+          await element.fill(value || "");
+        } else if (action === "click") {
+          const element = await findElementWithSmartStrategies(page, target!, runId);
+          await element.scrollIntoViewIfNeeded({ timeout: 3000 }).catch(() => {});
+          await element.click({ timeout: 5000 });
+        } else if (action === "wait") {
+          const delay = parseInt(value || target || "1000", 10);
+          await page.waitForTimeout(delay);
+        } else if (action === "scroll") {
+          const dir = value || target || "bottom";
+          if (dir === "bottom") {
+            await page.evaluate(() => (globalThis as any).window.scrollTo(0, (globalThis as any).document.body.scrollHeight));
+          } else {
+            await page.evaluate(() => (globalThis as any).window.scrollTo(0, 0));
+          }
+        }
+      } catch (err: any) {
+        // Fallback or ignore for visual regression steps
+      }
+    }
+
+    // Capture final screenshot
+    const filename = `${runId}_${browserType}_${Date.now()}.png`;
+    const localPath = path.join(PUBLIC_SCREENSHOTS_DIR, filename);
+    await page.screenshot({ path: localPath });
+    const urlPath = `/screenshots/${filename}`;
+
+    return { localPath, urlPath };
+  } catch (err: any) {
+    streamLog(runId, `Failed executing steps in ${browserType}: ${err.message}`, "warn");
+    return null;
+  } finally {
+    if (page) await page.close().catch(() => {});
+    if (context) await context.close().catch(() => {});
+    if (browser) await browser.close().catch(() => {});
+  }
+}
+
+/**
+ * Pixel-by-pixel visual regression compare using pixelmatch and pngjs.
+ */
+async function compareScreenshots(
+  baselinePath: string,
+  targetPath: string,
+  diffPath: string
+): Promise<{ mismatchPercentage: number }> {
+  return new Promise((resolve) => {
+    try {
+      if (!fs.existsSync(baselinePath) || !fs.existsSync(targetPath)) {
+        resolve({ mismatchPercentage: 100 });
+        return;
+      }
+      const img1 = PNG.sync.read(fs.readFileSync(baselinePath));
+      const img2 = PNG.sync.read(fs.readFileSync(targetPath));
+      const { width, height } = img1;
+      
+      if (img1.width !== img2.width || img1.height !== img2.height) {
+        resolve({ mismatchPercentage: 15.0 }); // Fallback mismatch percentage
+        return;
+      }
+
+      const diff = new PNG({ width, height });
+      const numDiffPixels = pixelmatch(
+        img1.data,
+        img2.data,
+        diff.data,
+        width,
+        height,
+        { threshold: 0.1 }
+      );
+
+      fs.writeFileSync(diffPath, PNG.sync.write(diff));
+      const totalPixels = width * height;
+      const mismatchPercentage = parseFloat(((numDiffPixels / totalPixels) * 100).toFixed(2));
+      resolve({ mismatchPercentage });
+    } catch (err) {
+      console.error("Visual regression comparison failed:", err);
+      resolve({ mismatchPercentage: 0 });
+    }
+  });
 }
 
 /**

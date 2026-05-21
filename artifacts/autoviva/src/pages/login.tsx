@@ -46,16 +46,16 @@ export default function Login() {
         onSuccess: (res) => {
           login(res.token, res.user);
           toast({
-            title: "Login successful",
-            description: "Welcome back to AutoViva AI.",
+            title: "Welcome back",
+            description: "Successfully authenticated with AutoViva.",
           });
           setLocation("/dashboard");
         },
         onError: (error: any) => {
           toast({
             variant: "destructive",
-            title: "Login failed",
-            description: error?.data?.error || "Invalid credentials. Please try again.",
+            title: "Authentication failed",
+            description: error?.data?.error || "Invalid credentials.",
           });
         },
       }
@@ -74,11 +74,17 @@ export default function Login() {
             name="email"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Email</FormLabel>
+                <FormLabel className="text-xs uppercase tracking-wider text-[#a1a4a5] font-sans font-medium">Email</FormLabel>
                 <FormControl>
-                  <Input placeholder="name@college.edu" type="email" {...field} disabled={loginMutation.isPending} />
+                  <Input 
+                    placeholder="name@college.edu" 
+                    type="email" 
+                    {...field} 
+                    disabled={loginMutation.isPending} 
+                    className="bg-[#0a0a0c] border border-white/14 rounded-md focus-visible:ring-0 focus-visible:border-[#fcfdff] text-[#fcfdff] placeholder-neutral-600 h-10 transition-colors"
+                  />
                 </FormControl>
-                <FormMessage />
+                <FormMessage className="text-[#ff2047] text-xs font-sans mt-1" />
               </FormItem>
             )}
           />
@@ -88,27 +94,37 @@ export default function Login() {
             render={({ field }) => (
               <FormItem>
                 <div className="flex items-center justify-between">
-                  <FormLabel>Password</FormLabel>
-                  <Link href="/forgot-password" className="text-sm font-medium text-primary hover:underline">
+                  <FormLabel className="text-xs uppercase tracking-wider text-[#a1a4a5] font-sans font-medium">Password</FormLabel>
+                  <Link href="/forgot-password" className="text-xs font-sans text-[#3b9eff] hover:underline transition-all">
                     Forgot password?
                   </Link>
                 </div>
                 <FormControl>
-                  <Input type="password" placeholder="••••••••" {...field} disabled={loginMutation.isPending} />
+                  <Input 
+                    type="password" 
+                    placeholder="••••••••" 
+                    {...field} 
+                    disabled={loginMutation.isPending} 
+                    className="bg-[#0a0a0c] border border-white/14 rounded-md focus-visible:ring-0 focus-visible:border-[#fcfdff] text-[#fcfdff] placeholder-neutral-600 h-10 transition-colors"
+                  />
                 </FormControl>
-                <FormMessage />
+                <FormMessage className="text-[#ff2047] text-xs font-sans mt-1" />
               </FormItem>
             )}
           />
-          <Button type="submit" className="w-full" disabled={loginMutation.isPending}>
-            {loginMutation.isPending ? "Signing in..." : "Sign In"}
+          <Button 
+            type="submit" 
+            className="w-full bg-[#fcfdff] text-black hover:bg-[#f1f7fe] font-sans font-medium rounded-md h-10 shadow-none mt-2 transition-all" 
+            disabled={loginMutation.isPending}
+          >
+            {loginMutation.isPending ? "Verifying credentials..." : "Sign In"}
           </Button>
         </form>
       </Form>
       
-      <div className="mt-8 text-center text-sm text-muted-foreground">
+      <div className="mt-8 text-center text-xs text-[#888e90] font-sans">
         Don't have an account?{" "}
-        <Link href="/register" className="font-medium text-primary hover:underline">
+        <Link href="/register" className="text-[#3b9eff] hover:underline font-medium ml-1">
           Create an account
         </Link>
       </div>

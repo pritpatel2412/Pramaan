@@ -8,7 +8,7 @@ import { useState } from "react";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell
 } from "recharts";
-import { CheckCircle2, XCircle, AlertTriangle, Download, MessageSquare, ChevronDown, ChevronRight, ExternalLink } from "lucide-react";
+import { CheckCircle2, XCircle, AlertTriangle, Download, MessageSquare, ChevronDown, ChevronRight, ExternalLink, Layers } from "lucide-react";
 
 function gradeColor(grade: string | null | undefined) {
   if (!grade) return "text-muted-foreground";
@@ -85,6 +85,287 @@ function AuditGauge({ score, label }: AuditGaugeProps) {
       </div>
       <span className="text-xs font-semibold tracking-wide text-slate-300 mt-3 text-center">{label}</span>
     </div>
+  );
+}
+
+function VisualCompareSlider({ 
+  leftImage, 
+  rightImage, 
+  leftLabel = "Chromium", 
+  rightLabel = "Firefox",
+  mismatch = 0
+}: { 
+  leftImage: string; 
+  rightImage: string; 
+  leftLabel?: string; 
+  rightLabel?: string;
+  mismatch?: number;
+}) {
+  const [sliderPos, setSliderPos] = useState(50);
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const percentage = Math.max(0, Math.min(100, (x / rect.width) * 100));
+    setSliderPos(percentage);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length === 0) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.touches[0].clientX - rect.left;
+    const percentage = Math.max(0, Math.min(100, (x / rect.width) * 100));
+    setSliderPos(percentage);
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
+        <span className="font-medium text-foreground">{leftLabel} vs {rightLabel}</span>
+        <span className="text-orange-400 font-mono font-medium">Layout Drift: {mismatch}%</span>
+      </div>
+      
+      <div 
+        className="relative h-[400px] w-full select-none overflow-hidden rounded-lg border border-border/85 bg-black cursor-ew-resize"
+        onMouseMove={handleMouseMove}
+        onTouchMove={handleTouchMove}
+      >
+        {/* Left Image (Chromium) */}
+        <img 
+          src={leftImage} 
+          alt={leftLabel} 
+          className="absolute inset-0 h-full w-full object-cover object-top"
+        />
+        
+        {/* Right Image (Target Browser) */}
+        <div 
+          className="absolute inset-0 overflow-hidden" 
+          style={{ clipPath: `polygon(${sliderPos}% 0, 100% 0, 100% 100%, ${sliderPos}% 100%)` }}
+        >
+          <img 
+            src={rightImage} 
+            alt={rightLabel} 
+            className="absolute inset-0 h-full w-full object-cover object-top"
+            style={{ width: '100%', height: '100%' }}
+          />
+        </div>
+        
+        {/* Slider Divider Bar */}
+        <div 
+          className="absolute bottom-0 top-0 w-0.5 bg-white cursor-ew-resize z-20"
+          style={{ left: `${sliderPos}%` }}
+        >
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-white border border-black shadow flex items-center justify-center text-[10px] text-black font-bold pointer-events-none">
+            ↔
+          </div>
+        </div>
+
+        {/* Floating Labels */}
+        <div className="absolute top-2 left-2 px-2 py-0.5 text-[10px] font-medium bg-black/60 backdrop-blur border border-white/10 rounded text-white pointer-events-none z-10">
+          {leftLabel}
+        </div>
+        <div className="absolute top-2 right-2 px-2 py-0.5 text-[10px] font-medium bg-black/60 backdrop-blur border border-white/10 rounded text-white pointer-events-none z-10">
+          {rightLabel}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function VisualRegressionPanel({ visualRegression }: { visualRegression: any[] }) {
+  const [selectedCaseIdx, setSelectedCaseIdx] = useState(0);
+  const [compareBrowser, setCompareBrowser] = useState<"firefox" | "webkit">("firefox");
+  const [viewMode, setViewMode] = useState<"slider" | "diff" | "side">("slider");
+
+  if (!visualRegression || visualRegression.length === 0) return null;
+
+  const currentCase = visualRegression[selectedCaseIdx];
+  const targetImage = compareBrowser === "firefox" ? currentCase.firefox : currentCase.webkit;
+  const targetDiff = compareBrowser === "firefox" ? currentCase.firefoxDiff : currentCase.webkitDiff;
+  const targetMismatch = compareBrowser === "firefox" ? currentCase.firefoxMismatch : currentCase.webkitMismatch;
+  const targetLabel = compareBrowser === "firefox" ? "Firefox" : "WebKit (Safari)";
+
+  return (
+    <Card className="border-border bg-card/40 backdrop-blur-md relative overflow-hidden my-6">
+      {/* Editorial orange glow backdrop */}
+      <div className="absolute top-0 left-1/4 w-[500px] h-[300px] bg-orange-500/5 rounded-full blur-[100px] pointer-events-none" />
+      
+      <CardHeader>
+        <CardTitle className="text-lg font-bold flex items-center justify-between">
+          <div className="flex items-center gap-2 font-favorit">
+            <Layers className="w-5 h-5 text-orange-400 shrink-0" />
+            Cross-Browser Visual Regression Pipeline
+          </div>
+          <span className="text-[10px] font-mono tracking-wider uppercase bg-orange-500/10 text-orange-400 px-2 py-0.5 rounded border border-orange-500/20">Pixelmatch 7.0</span>
+        </CardTitle>
+        <p className="text-xs text-muted-foreground mt-1">
+          Detect pixel-by-pixel rendering drifts between Chromium baseline and target engines.
+        </p>
+      </CardHeader>
+      
+      <CardContent className="space-y-6">
+        {/* Test Case Select Tabs */}
+        <div className="flex flex-wrap gap-2 pb-2 border-b border-border/40">
+          {visualRegression.map((tc, idx) => (
+            <button
+              key={tc.testCaseId}
+              onClick={() => setSelectedCaseIdx(idx)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                selectedCaseIdx === idx
+                  ? "bg-white text-black border-white"
+                  : "bg-muted/10 text-muted-foreground border-border hover:text-foreground"
+              }`}
+            >
+              {tc.testCaseTitle}
+            </button>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          {/* Controls Panel */}
+          <div className="lg:col-span-3 space-y-4">
+            <div className="space-y-2">
+              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground font-mono">Target Engine</label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => setCompareBrowser("firefox")}
+                  className={`px-3 py-2 rounded-lg text-xs font-medium border text-center transition-all ${
+                    compareBrowser === "firefox"
+                      ? "bg-muted/20 text-foreground border-primary"
+                      : "bg-transparent text-muted-foreground border-border hover:text-foreground"
+                  }`}
+                >
+                  Firefox
+                </button>
+                <button
+                  onClick={() => setCompareBrowser("webkit")}
+                  className={`px-3 py-2 rounded-lg text-xs font-medium border text-center transition-all ${
+                    compareBrowser === "webkit"
+                      ? "bg-muted/20 text-foreground border-primary"
+                      : "bg-transparent text-muted-foreground border-border hover:text-foreground"
+                  }`}
+                >
+                  WebKit (Safari)
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground font-mono">Visualization</label>
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={() => setViewMode("slider")}
+                  className={`px-3 py-2 rounded-lg text-xs font-medium border text-left transition-all ${
+                    viewMode === "slider"
+                      ? "bg-muted/20 text-foreground border-primary"
+                      : "bg-transparent text-muted-foreground border-border hover:text-foreground"
+                  }`}
+                >
+                  ↔ Interactive Morph Slider
+                </button>
+                <button
+                  onClick={() => setViewMode("diff")}
+                  className={`px-3 py-2 rounded-lg text-xs font-medium border text-left transition-all ${
+                    viewMode === "diff"
+                      ? "bg-muted/20 text-foreground border-primary"
+                      : "bg-transparent text-muted-foreground border-border hover:text-foreground"
+                  }`}
+                >
+                  🔴 Highlight Layout Drifts
+                </button>
+                <button
+                  onClick={() => setViewMode("side")}
+                  className={`px-3 py-2 rounded-lg text-xs font-medium border text-left transition-all ${
+                    viewMode === "side"
+                      ? "bg-muted/20 text-foreground border-primary"
+                      : "bg-transparent text-muted-foreground border-border hover:text-foreground"
+                  }`}
+                >
+                  🖥️ Side-by-Side Static
+                </button>
+              </div>
+            </div>
+
+            {/* Drift Health Card */}
+            <div className="p-4 rounded-xl border border-border bg-muted/5 space-y-2">
+              <span className="text-[10px] font-bold text-muted-foreground uppercase font-mono">Comparison Health</span>
+              <div className="flex items-baseline gap-2">
+                <span className="text-2xl font-bold font-mono">
+                  {(100 - targetMismatch).toFixed(1)}%
+                </span>
+                <span className="text-xs text-muted-foreground">consistency</span>
+              </div>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                {targetMismatch < 3 
+                  ? "Perfect cross-engine consistency. Zero structure shifting." 
+                  : targetMismatch < 10 
+                  ? "Minor layout shifts. Typographical rendering variants or minor alignments."
+                  : "Critical drift. Check grid layouts, spacing, or CSS compatibility issues."}
+              </p>
+            </div>
+          </div>
+
+          {/* Viewer Area */}
+          <div className="lg:col-span-9">
+            {viewMode === "slider" && (
+              <VisualCompareSlider
+                leftImage={currentCase.chromium}
+                rightImage={targetImage}
+                leftLabel="Chromium"
+                rightLabel={targetLabel}
+                mismatch={targetMismatch}
+              />
+            )}
+
+            {viewMode === "diff" && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
+                  <span>Visual Drift Highlight (Red denotes mismatch pixels)</span>
+                  <span className="text-orange-400 font-mono font-medium">{targetMismatch}% mismatch</span>
+                </div>
+                <div className="relative h-[400px] w-full rounded-lg border border-border overflow-hidden bg-[#06060a]">
+                  {targetDiff ? (
+                    <img
+                      src={targetDiff}
+                      alt="Pixelmatch Diff"
+                      className="w-full h-full object-cover object-top"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex flex-col items-center justify-center text-sm text-muted-foreground gap-2 p-6">
+                      <AlertTriangle className="w-8 h-8 text-amber-500" />
+                      No mismatch difference overlay generated.
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {viewMode === "side" && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
+                  <span>Chromium vs {targetLabel} Static comparison</span>
+                  <span className="text-orange-400 font-mono font-medium">{targetMismatch}% mismatch</span>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <span className="text-[10px] text-muted-foreground">Chromium (Baseline)</span>
+                    <div className="border border-border rounded-lg overflow-hidden h-[300px]">
+                      <img src={currentCase.chromium} className="w-full h-full object-cover object-top" />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-[10px] text-muted-foreground">{targetLabel}</span>
+                    <div className="border border-border rounded-lg overflow-hidden h-[300px]">
+                      <img src={targetImage} className="w-full h-full object-cover object-top" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 

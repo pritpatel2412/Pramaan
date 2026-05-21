@@ -99,7 +99,7 @@ router.post("/runs/start", requireAuth, async (req, res) => {
     res.status(400).json({ error: "Invalid request body" });
     return;
   }
-  const { projectId, suiteId, mode } = parsed.data;
+  const { projectId, suiteId, mode, multiBrowser } = parsed.data;
 
   const [project] = await db.select().from(projectsTable)
     .where(and(eq(projectsTable.id, projectId), eq(projectsTable.userId, req.user!.userId))).limit(1);
@@ -128,6 +128,7 @@ router.post("/runs/start", requireAuth, async (req, res) => {
     passed: 0,
     failed: 0,
     startedAt: new Date(),
+    multiBrowser: !!multiBrowser,
   }).returning();
 
   // Run the Playwright automation in the background

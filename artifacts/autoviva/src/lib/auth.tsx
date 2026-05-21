@@ -1,5 +1,4 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
-import { useLocation } from "wouter";
 import { setAuthTokenGetter } from "@workspace/api-client-react";
 
 interface User {
@@ -24,7 +23,6 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
-  const [, setLocation] = useLocation();
 
   useEffect(() => {
     const storedToken = localStorage.getItem("autoviva_token");
@@ -58,8 +56,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setToken(null);
     setUser(null);
     setAuthTokenGetter(() => null);
-    setLocation("/login");
-  }, [setLocation]);
+    window.location.href = "/login";
+  }, []);
 
   return (
     <AuthContext.Provider value={{ user, token, login, logout, isAuthenticated: !!token }}>

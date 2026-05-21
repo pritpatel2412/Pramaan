@@ -18,4 +18,5 @@ export interface RunStartInput {
   maxTimePerTestSeconds?: number;
   retryFailedSteps?: number;
   headless?: boolean;
+  multiBrowser?: boolean;
 }

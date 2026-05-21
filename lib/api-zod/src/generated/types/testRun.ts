@@ -36,5 +36,6 @@ export interface TestRun {
   startedAt?: string | null;
   /** @nullable */
   completedAt?: string | null;
+  multiBrowser?: boolean;
   createdAt: Date;
 }
