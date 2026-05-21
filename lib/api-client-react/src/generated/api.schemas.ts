@@ -174,6 +174,7 @@ export const TestStepAction = {
   assert_url: 'assert_url',
   assert_element: 'assert_element',
   scroll: 'scroll',
+  autofill: 'autofill',
 } as const;
 
 export interface TestStep {

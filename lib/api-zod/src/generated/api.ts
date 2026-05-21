@@ -360,7 +360,7 @@ export const GenerateTestCasesResponse = zod.object({
   "role": zod.string().nullish(),
   "description": zod.string().nullish(),
   "steps": zod.array(zod.object({
-  "action": zod.enum(['navigate', 'click', 'fill', 'wait', 'screenshot', 'assert_text', 'assert_url', 'assert_element', 'scroll']),
+  "action": zod.enum(['navigate', 'click', 'fill', 'wait', 'screenshot', 'assert_text', 'assert_url', 'assert_element', 'scroll', 'autofill']),
   "target": zod.string().nullish(),
   "value": zod.string().nullish()
 })),

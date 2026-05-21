@@ -256,3 +256,70 @@ Return ONLY valid JSON, no markdown.`;
     return { canRecover: false, alternatives: [] };
   }
 }
+
+/**
+ * Agent 3: FormAutofillAgent
+ * Synthesizes semantically consistent and valid input values to autofill forms on the fly.
+ */
+export async function runFormAutofillAgent(input: {
+  url: string;
+  fields: Array<{
+    id: string;
+    name: string;
+    tagName: string;
+    type: string;
+    placeholder: string;
+    ariaLabel: string;
+    labelText: string;
+    options: Array<{ value: string; text: string }>;
+  }>;
+  userInstruction?: string | null;
+}) {
+  const prompt = `You are AutoViva AI's Form Autofill Agent.
+Analyze the visible form fields on the active page and synthesize a highly coherent, valid, and semantically consistent set of input values to fill out the form.
+
+Current URL: ${input.url}
+User Instruction: ${input.userInstruction || "Complete the form with appropriate standard mock values."}
+
+Form Fields:
+${JSON.stringify(input.fields, null, 2)}
+
+Rules for value synthesis:
+1. Every field value MUST make logical sense in relation to other fields (e.g. if name is "Alice Smith", email should be "alice.smith@example.com", phone should be a valid mock number, password should be secure, etc.).
+2. For "password" type fields, generate a secure strong password string.
+3. For "select" fields, you MUST choose exactly one of the available option values from the "options" list.
+4. For checkboxes or radios, provide a valid value (e.g. "true", "false", or a matching option value).
+5. If credit cards, billing, or CVVs are requested, use standard mock sandbox card details (e.g., standard visa 4111111111111111).
+6. Match each value back to the fields list using their ID or name attributes.
+
+Return a JSON object with this exact structure:
+{
+  "fills": [
+    {
+      "id": "string (field id or empty)",
+      "name": "string (field name or empty)",
+      "tagName": "string (tagName)",
+      "type": "string (type)",
+      "value": "string (the value to fill/select/toggle)",
+      "reasoning": "string explaining the chosen value"
+    }
+  ]
+}
+
+Return ONLY valid JSON, no explaining, no markdown prefix.`;
+
+  try {
+    const response = await getClient().chat.completions.create({
+      model: MODEL,
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.2,
+      response_format: { type: "json_object" },
+    });
+    const content = response.choices[0]?.message?.content ?? "{}";
+    return JSON.parse(content).fills || [];
+  } catch (err) {
+    console.error("FormAutofillAgent failed:", err);
+    return [];
+  }
+}
+

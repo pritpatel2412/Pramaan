@@ -353,7 +353,7 @@ export default function TestSuiteNew() {
                             }}
                             className="h-7 text-xs bg-background border border-input rounded px-2 w-28 shrink-0"
                           >
-                            {["navigate", "click", "fill", "wait", "screenshot", "assert_text", "assert_url", "assert_element", "scroll"].map(a => (
+                            {["navigate", "click", "fill", "wait", "screenshot", "assert_text", "assert_url", "assert_element", "scroll", "autofill"].map(a => (
                               <option key={a} value={a}>{a}</option>
                             ))}
                           </select>

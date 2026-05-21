@@ -2,7 +2,7 @@ import { chromium, type Browser, type BrowserContext, type Page, type Locator } 
 import { db, testRunsTable, testResultsTable, screenshotsTable, credentialsTable, projectsTable, reportsTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { streamLog } from "./runLogger";
-import { runProjectUnderstanding, runTestPlanner, runAssertion, runRecovery, decrypt } from "./agents";
+import { runProjectUnderstanding, runTestPlanner, runAssertion, runRecovery, decrypt, runFormAutofillAgent } from "./agents";
 import { generateEvaluationReport } from "./ai";
 import fs from "fs";
 import path from "path";
@@ -102,6 +102,97 @@ async function getVisibleInteractiveElements(page: Page): Promise<string[]> {
           return `${tagName}[id='${id}'][name='${name}'][placeholder='${placeholder}'][label='${label}'] text:${text.slice(0, 30)}`;
         })
         .slice(0, 30); // Cap it
+    });
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Extracts visible and interactive input, select, and textarea fields from the active viewport
+ */
+async function getVisibleFormFields(page: Page): Promise<any[]> {
+  try {
+    return await page.evaluate(() => {
+      const doc = (globalThis as any).document;
+      const win = (globalThis as any).window;
+      
+      const elements = Array.from(doc.querySelectorAll("input, select, textarea")) as any[];
+      
+      return elements
+        .filter((el) => {
+          const rect = el.getBoundingClientRect();
+          const style = win.getComputedStyle(el);
+          const isVisible = rect.width > 0 && rect.height > 0 && style.display !== "none" && style.visibility !== "hidden";
+          const isInteractive = !el.disabled && !el.readOnly && el.type !== "submit" && el.type !== "button" && el.type !== "hidden";
+          return isVisible && isInteractive;
+        })
+        .map((el) => {
+          const tagName = el.tagName.toLowerCase();
+          const type = el.getAttribute("type") || (tagName === "textarea" ? "textarea" : tagName === "select" ? "select" : "text");
+          const name = el.getAttribute("name") || "";
+          const id = el.id || "";
+          const placeholder = el.getAttribute("placeholder") || "";
+          const ariaLabel = el.getAttribute("aria-label") || "";
+          
+          let labelText = "";
+          if (id) {
+            const labelEl = doc.querySelector(`label[for="${id}"]`);
+            if (labelEl) labelText = labelEl.textContent?.trim() || "";
+          }
+          if (!labelText) {
+            const parentLabel = el.closest("label");
+            if (parentLabel) labelText = parentLabel.textContent?.trim() || "";
+          }
+          
+          let options: any[] = [];
+          if (tagName === "select") {
+            options = Array.from(el.querySelectorAll("option")).map((opt: any) => ({
+              value: opt.value || opt.text || "",
+              text: opt.text?.trim() || ""
+            }));
+          }
+
+          return {
+            id,
+            name,
+            tagName,
+            type,
+            placeholder,
+            ariaLabel,
+            labelText,
+            options
+          };
+        });
+    });
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Scans the active page DOM for visible form validation errors
+ */
+async function scanValidationErrors(page: Page): Promise<string[]> {
+  try {
+    return await page.evaluate(() => {
+      const doc = (globalThis as any).document;
+      const win = (globalThis as any).window;
+      
+      // Select common validation error selectors
+      const elements = Array.from(doc.querySelectorAll(
+        ".error, [class*='error'], [class*='invalid'], .text-red-500, .text-destructive, [role='alert'], [aria-invalid='true']"
+      )) as any[];
+      
+      return elements
+        .filter((el) => {
+          const rect = el.getBoundingClientRect();
+          const style = win.getComputedStyle(el);
+          const isVisible = rect.width > 0 && rect.height > 0 && style.display !== "none" && style.visibility !== "hidden";
+          const text = el.textContent?.trim() || "";
+          return isVisible && text.length > 0 && text.length < 200; // Filter out huge text blocks
+        })
+        .map((el) => el.textContent?.trim() || "");
     });
   } catch {
     return [];
@@ -322,6 +413,103 @@ export async function executeRealBrowserEvaluation(
               throw new Error(`Element "${target}" is not visible.`);
             }
             streamLog(runId, `✓ Element visibility assertion passed.`, "pass");
+          } else if (action === "autofill") {
+            const customInstruction = value || target || "";
+            streamLog(runId, `[AutofillAgent] Scanning for visible forms and input fields...`, "info");
+            const fields = await getVisibleFormFields(page);
+            
+            if (fields.length === 0) {
+              streamLog(runId, `[AutofillAgent] No interactive input fields or forms found on this page.`, "warn");
+            } else {
+              streamLog(runId, `[AutofillAgent] Detected ${fields.length} form fields. Querying FormAutofillAgent...`, "info");
+              const fills = await runFormAutofillAgent({
+                url: page.url(),
+                fields,
+                userInstruction: customInstruction
+              });
+              
+              streamLog(runId, `[AutofillAgent] FormAutofillAgent generated ${fills.length} field values. Executing fills...`, "info");
+              for (const fill of fills) {
+                try {
+                  // Robust field locator
+                  let selector = "";
+                  if (fill.id) {
+                    selector = `#${fill.id}`;
+                  } else if (fill.name) {
+                    selector = `[name="${fill.name}"]`;
+                  } else {
+                    continue; // Skip if no way to locate
+                  }
+                  
+                  const element = page.locator(selector).first();
+                  if (await element.isVisible({ timeout: 2000 }).catch(() => false)) {
+                    await element.scrollIntoViewIfNeeded({ timeout: 1000 }).catch(() => {});
+                    if (fill.tagName === "select") {
+                      streamLog(runId, `[AutofillAgent] Selecting "${fill.value}" for: ${fill.name || fill.id}`, "info");
+                      await element.selectOption(fill.value);
+                    } else if (fill.type === "checkbox" || fill.type === "radio") {
+                      const checkVal = fill.value === "true" || fill.value === "checked";
+                      streamLog(runId, `[AutofillAgent] Setting checked to ${checkVal} for: ${fill.name || fill.id}`, "info");
+                      await element.setChecked(checkVal).catch(async () => {
+                        // Fallback click
+                        if (checkVal) await element.click();
+                      });
+                    } else {
+                      const isPassword = fill.type === "password" || fill.name?.toLowerCase().includes("password") || fill.id?.toLowerCase().includes("password");
+                      const loggedVal = isPassword ? "****" : fill.value;
+                      streamLog(runId, `[AutofillAgent] Simulating human typing of "${loggedVal}" into: ${fill.name || fill.id}`, "info");
+                      
+                      // Simulate realistic human keystroke typing
+                      await element.focus();
+                      await element.fill(""); // Clear existing
+                      await element.pressSequentially(fill.value, { delay: 40 + Math.random() * 30 });
+                    }
+                  }
+                } catch (fillErr: any) {
+                  streamLog(runId, `[AutofillAgent] Failed to fill field ${fill.name || fill.id}: ${fillErr.message}`, "warn");
+                }
+              }
+
+              // Self-healing Validation Boundary Check
+              streamLog(runId, `[AutofillAgent] Fills executed. Waiting for dynamic validation checks...`, "info");
+              await page.waitForTimeout(1200);
+
+              const errors = await scanValidationErrors(page);
+              if (errors.length > 0) {
+                streamLog(runId, `[AutofillAgent] ⚠️ Validation errors detected: "${errors.join("; ")}". Initiating cognitive self-healing...`, "warn");
+                // Run correction loop
+                const correctedFills = await runFormAutofillAgent({
+                  url: page.url(),
+                  fields: fields.map(f => ({ ...f, currentError: errors.join("; ") })),
+                  userInstruction: `CORRECT THE FORM. Avoid the following validation errors: ${errors.join("; ")}. Previous instruction: ${customInstruction}`
+                });
+
+                streamLog(runId, `[AutofillAgent] FormAutofillAgent provided corrected values. Applying fixes...`, "info");
+                for (const fill of correctedFills) {
+                  try {
+                    let selector = "";
+                    if (fill.id) selector = `#${fill.id}`;
+                    else if (fill.name) selector = `[name="${fill.name}"]`;
+                    else continue;
+
+                    const element = page.locator(selector).first();
+                    if (await element.isVisible().catch(() => false)) {
+                      await element.focus();
+                      await element.fill("");
+                      await element.pressSequentially(fill.value, { delay: 30 });
+                      streamLog(runId, `[AutofillAgent] Healed field ${fill.name || fill.id} with new value.`, "pass");
+                    }
+                  } catch (healErr) {
+                    // Ignore and continue
+                  }
+                }
+                
+                // Final brief wait to let validation settle
+                await page.waitForTimeout(800);
+              } else {
+                streamLog(runId, `[AutofillAgent] ✓ Form autofill completed with no validation errors!`, "pass");
+              }
+            }
           } else {
             streamLog(runId, `Unknown browser action: "${action}". Skipping.`, "warn");
           }

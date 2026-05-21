@@ -860,7 +860,7 @@ components:
       properties:
         action:
           type: string
-          enum: [navigate, click, fill, wait, screenshot, assert_text, assert_url, assert_element, scroll]
+          enum: [navigate, click, fill, wait, screenshot, assert_text, assert_url, assert_element, scroll, autofill]
         target:
           type: ["string", "null"]
         value:
